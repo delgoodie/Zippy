@@ -1,0 +1,14 @@
+{
+    "Version": "1.1",
+    "Data": {
+        "Source": "c:\\users\\luked\\documents\\unreal projects\\zippy\\source\\zippy\\private\\zippy.cpp",
+        "ProvidedModule": "",
+        "PCH": "c:\\users\\luked\\documents\\unreal projects\\zippy\\intermediate\\build\\win64\\zippyeditor\\development\\engine\\sharedpch.engine.shadowerrors.h.pch",
+        "Includes": [
+            "c:\\users\\luked\\documents\\unreal projects\\zippy\\intermediate\\build\\win64\\unrealeditor\\development\\zippy\\definitions.zippy.h",
+            "c:\\users\\luked\\documents\\unreal projects\\zippy\\source\\zippy\\public\\zippy.h"
+        ],
+        "ImportedModules": [],
+        "ImportedHeaderUnits": []
+    }
+}

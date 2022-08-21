@@ -1,0 +1,17 @@
+/NOLOGO
+/errorReport:prompt
+/MACHINE:x64
+/SUBSYSTEM:WINDOWS
+/DEF
+/NAME:"UnrealEditor-Zippy.dll"
+/IGNORE:4221
+/NODEFAULTLIB
+"C:\Users\luked\Documents\Unreal Projects\Zippy\Intermediate\Build\Win64\ZippyEditor\Development\Engine\SharedPCH.Engine.ShadowErrors.h.obj"
+"C:\Users\luked\Documents\Unreal Projects\Zippy\Intermediate\Build\Win64\UnrealEditor\Development\Zippy\Zippy.cpp.obj"
+"C:\Users\luked\Documents\Unreal Projects\Zippy\Intermediate\Build\Win64\UnrealEditor\Development\Zippy\ZippyCharacter.cpp.obj"
+"C:\Users\luked\Documents\Unreal Projects\Zippy\Intermediate\Build\Win64\UnrealEditor\Development\Zippy\ZippyGameMode.cpp.obj"
+"C:\Users\luked\Documents\Unreal Projects\Zippy\Intermediate\Build\Win64\UnrealEditor\Development\Zippy\Zippy.init.gen.cpp.obj"
+"C:\Users\luked\Documents\Unreal Projects\Zippy\Intermediate\Build\Win64\UnrealEditor\Development\Zippy\ZippyCharacter.gen.cpp.obj"
+"C:\Users\luked\Documents\Unreal Projects\Zippy\Intermediate\Build\Win64\UnrealEditor\Development\Zippy\ZippyGameMode.gen.cpp.obj"
+"C:\Users\luked\Documents\Unreal Projects\Zippy\Intermediate\Build\Win64\UnrealEditor\Development\Zippy\Default.rc2.res"
+/OUT:"C:\Users\luked\Documents\Unreal Projects\Zippy\Intermediate\Build\Win64\UnrealEditor\Development\Zippy\UnrealEditor-Zippy.lib"

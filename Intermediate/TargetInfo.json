@@ -1,0 +1,14 @@
+{
+	"Targets": [
+		{
+			"Name": "Zippy",
+			"Path": "C:\\Users\\luked\\Documents\\Unreal Projects\\Zippy\\Source\\Zippy.Target.cs",
+			"Type": "Game"
+		},
+		{
+			"Name": "ZippyEditor",
+			"Path": "C:\\Users\\luked\\Documents\\Unreal Projects\\Zippy\\Source\\ZippyEditor.Target.cs",
+			"Type": "Editor"
+		}
+	]
+}
