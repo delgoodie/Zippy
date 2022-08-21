@@ -15,6 +15,9 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 
 		uint8 Saved_bWantsToSprint:1;
 
+	public:
+		FSavedMove_Zippy();
+
 		virtual bool CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* InCharacter, float MaxDelta) const override;
 		virtual void Clear() override;
 		virtual uint8 GetCompressedFlags() const override;

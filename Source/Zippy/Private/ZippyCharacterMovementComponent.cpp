@@ -2,6 +2,11 @@
 
 #include "GameFramework/Character.h"
 
+UZippyCharacterMovementComponent::FSavedMove_Zippy::FSavedMove_Zippy()
+{
+	Saved_bWantsToSprint=0;
+}
+
 bool UZippyCharacterMovementComponent::FSavedMove_Zippy::CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* InCharacter, float MaxDelta) const
 {
 	FSavedMove_Zippy* NewZippyMove = static_cast<FSavedMove_Zippy*>(NewMove.Get());
