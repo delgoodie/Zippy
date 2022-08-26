@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Zippy.h"
+#include "GameFramework/Character.h"
 #include "ZippyCharacter.generated.h"
 
 UCLASS(config=Game)
@@ -37,5 +38,9 @@ protected:
 public:
 	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+	FORCEINLINE UZippyCharacterMovementComponent* GetZippyCharacterMovement() const { return ZippyCharacterMovementComponent; }
+
+	FCollisionQueryParams GetIgnoreCharacterParams() const;
+
 };
 

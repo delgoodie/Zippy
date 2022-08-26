@@ -2,4 +2,10 @@
 
 #include "CoreMinimal.h"
 
-#include "EngineClasses.h"
+class USpringArmComponent;
+class UCameraComponent;
+
+
+class AZippyCharacter;
+class UZippyCharacterMovementComponent;
+class AZippyCameraManager;
