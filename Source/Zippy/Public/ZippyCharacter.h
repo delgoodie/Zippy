@@ -12,7 +12,7 @@ class AZippyCharacter : public ACharacter
 
 	// Components
 protected:
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category=Movement) class UZippyCharacterMovementComponent* ZippyCharacterMovementComponent;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category=Movement) UZippyCharacterMovementComponent* ZippyCharacterMovementComponent;
 private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true")) USpringArmComponent* CameraBoom;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true")) UCameraComponent* FollowCamera;

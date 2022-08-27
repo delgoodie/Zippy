@@ -1,3 +1,5 @@
+
+
 #include "ZippyCharacterMovementComponent.h"
 
 #include "ZippyCharacter.h"
@@ -74,18 +76,11 @@ FSavedMovePtr UZippyCharacterMovementComponent::FNetworkPredictionData_Client_Zi
 
 #pragma endregion
 
-
 #pragma region CMC
 
 UZippyCharacterMovementComponent::UZippyCharacterMovementComponent()
 {
-}
-
-void UZippyCharacterMovementComponent::InitializeComponent()
-{
-	Super::InitializeComponent();
-
-	ZippyCharacterOwner = Cast<AZippyCharacter>(GetOwner());
+	NavAgentProps.bCanCrouch = true;
 }
 
 FNetworkPredictionData_Client* UZippyCharacterMovementComponent::GetPredictionData_Client() const
@@ -110,26 +105,6 @@ void UZippyCharacterMovementComponent::UpdateFromCompressedFlags(uint8 Flags)
 	Safe_bWantsToSprint = (Flags & FSavedMove_Character::FLAG_Custom_0) != 0;
 }
 
-void UZippyCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSeconds)
-{
-	Super::UpdateCharacterStateBeforeMovement(DeltaSeconds);
-
-	// Check Condition for entering slide
-	if (IsMovementMode(MOVE_Walking) && !bWantsToCrouch && IsCrouching())
-	{
-		if (Velocity.Size() > SlideMinSpeed)
-		{
-			EnterSlide();
-			bWantsToCrouch = true;
-		}
-	}
-
-	if (IsMovementMode(MOVE_Custom, CMOVE_Slide) && !bWantsToCrouch)
-	{
-		SetMovementMode(MOVE_Walking);
-	}
-}
-
 void UZippyCharacterMovementComponent::OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity)
 {
 	Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
@@ -145,154 +120,6 @@ void UZippyCharacterMovementComponent::OnMovementUpdated(float DeltaSeconds, con
 			MaxWalkSpeed = Walk_MaxWalkSpeed;
 		}
 	}
-}
-
-void UZippyCharacterMovementComponent::PhysCustom(float deltaTime, int32 Iterations)
-{
-	Super::PhysCustom(deltaTime, Iterations);
-
-	if (GetOwner()->GetLocalRole() < ROLE_AutonomousProxy) return;
-
-	switch(CustomMovementMode)
-	{
-	case CMOVE_Slide:
-		PhysSlide(deltaTime, Iterations);
-		break;
-	default:
-		return;
-	}
-}
-
-float UZippyCharacterMovementComponent::GetMaxSpeed() const
-{
-	if (MovementMode != MOVE_Custom)
-	{	
-		return Super::GetMaxSpeed();
-	}
-	else
-	{
-		switch (CustomMovementMode)
-		{
-		case CMOVE_Slide:
-			return SlideMaxSpeed;
-		default:
-			return MaxCustomMovementSpeed;
-		}
-	}
-}
-
-#pragma endregion
-
-#pragma region Slide
-
-void UZippyCharacterMovementComponent::EnterSlide()
-{
-	Velocity += UpdatedComponent->GetForwardVector() * SlideEnterImpulse;
-	SetMovementMode(MOVE_Custom, CMOVE_Slide);
-}
-
-bool UZippyCharacterMovementComponent::GetSlideSurface(FHitResult& SurfaceHit) const
-{
-	FVector Start = GetCapBottomCenter();
-	FVector End = GetCapBottom() - UpdatedComponent->GetUpVector() * SlideMaxSuraceDistance;
-	return GetWorld()->LineTraceSingleByProfile(SurfaceHit, Start, End, TEXT("BlockAll"), ZippyCharacterOwner->GetIgnoreCharacterParams());
-}
-
-void UZippyCharacterMovementComponent::PhysSlide(float deltaTime, int32 Iterations)
-{
-	if (deltaTime < MIN_TICK_TIME)
-	{
-		return;
-	}
-	
-	RestorePreAdditiveRootMotionVelocity();
-
-	FHitResult SurfaceHit;
-	if (!GetSlideSurface(SurfaceHit))
-	{
-		SetMovementMode(MOVE_Falling);
-		StartNewPhysics(deltaTime, Iterations++);
-		return;
-	}
-
-	if (Velocity.Size() < SlideMinSpeed)
-	{
-		SetMovementMode(MOVE_Walking);
-		StartNewPhysics(deltaTime, Iterations++);
-		return;
-	}
-
-	FVector SurfaceTangent = FVector::VectorPlaneProject(Velocity, SurfaceHit.Normal).GetSafeNormal();
-	float OldTangentSpeed = FVector::VectorPlaneProject(Velocity, SurfaceHit.Normal).Size();
-
-	// No input control, only Surface Gravity
-	Acceleration = FVector(0, 0, -GetGravityZ());
-
-	// Look-based Steering
-	
-	
-	// Calc Velocity
-	if(!HasAnimRootMotion() && !CurrentRootMotion.HasOverrideVelocity())
-	{
-		CalcVelocity(deltaTime, SlideFriction, true, GetMaxBrakingDeceleration());
-	}
-	ApplyRootMotionToVelocity(deltaTime);
-
-	// Perform Move
-	Iterations++;
-	bJustTeleported = false;
-	
-	FVector OldLocation = UpdatedComponent->GetComponentLocation();
-	FQuat OldRotation = UpdatedComponent->GetComponentRotation().Quaternion();
-	FHitResult Hit(1.f);
-	FVector Adjusted = Velocity * deltaTime;
-	SafeMoveUpdatedComponent(Adjusted, UpdatedComponent->GetComponentQuat(), true, Hit);
-
-	if (Hit.Time < 1.f)
-	{
-		HandleImpact(Hit, deltaTime, Adjusted);
-		SlideAlongSurface(Adjusted, (1.f - Hit.Time), Hit.Normal, Hit, true);
-	}
-
-	// Update Outgoing Velocity & Acceleration
-	if(!bJustTeleported && !HasAnimRootMotion() && !CurrentRootMotion.HasOverrideVelocity())
-	{
-		Velocity = (UpdatedComponent->GetComponentLocation() - OldLocation) / deltaTime;
-	}
-}
-
-#pragma endregion
-
-#pragma region Helpers
-
-FVector UZippyCharacterMovementComponent::GetCapTop() const
-{
-	return UpdatedComponent->GetComponentLocation() + UpdatedComponent->GetUpVector() * CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-}
-FVector UZippyCharacterMovementComponent::GetCapTopCenter() const
-{
-	return UpdatedComponent->GetComponentLocation() + UpdatedComponent->GetUpVector() * (CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleRadius());
-}
-FVector UZippyCharacterMovementComponent::GetCapBottom() const
-{
-	return UpdatedComponent->GetComponentLocation() - UpdatedComponent->GetUpVector() * CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-}
-FVector UZippyCharacterMovementComponent::GetCapBottomCenter() const
-{
-	return UpdatedComponent->GetComponentLocation() - UpdatedComponent->GetUpVector() * (CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleRadius());
-}
-float UZippyCharacterMovementComponent::GetCapRadius() const
-{
-	return CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleRadius();
-}
-float UZippyCharacterMovementComponent::GetCapHalfHeight() const
-{
-	return CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-}
-
-bool UZippyCharacterMovementComponent::IsMovementMode(EMovementMode InMovementMode, ECustomMovementMode InCustomMovementMode) const
-{
-	return MovementMode == InMovementMode && CustomMovementMode == InCustomMovementMode;
 }
 
 #pragma endregion

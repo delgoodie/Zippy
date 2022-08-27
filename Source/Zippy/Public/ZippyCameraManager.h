@@ -8,10 +8,9 @@ UCLASS()
 class ZIPPY_API AZippyCameraManager : public APlayerCameraManager
 {
 	GENERATED_BODY()
-private:
+
 	UPROPERTY(EditDefaultsOnly) float CrouchBlendDuration=.5f;
 	float CrouchBlendTime;
-
 	
 public:
 	AZippyCameraManager();

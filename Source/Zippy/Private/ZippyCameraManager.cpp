@@ -16,7 +16,11 @@ void AZippyCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float DeltaTime)
 	if (AZippyCharacter* ZippyCharacter = Cast<AZippyCharacter>(GetOwningPlayerController()->GetPawn()))
 	{
 		UZippyCharacterMovementComponent* ZMC = ZippyCharacter->GetZippyCharacterMovement();
-		FVector TargetCrouchOffset = FVector(0, 0, ZMC->GetCrouchedHalfHeight() - ZippyCharacter->GetClass()->GetDefaultObject<ACharacter>()->GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+		FVector TargetCrouchOffset = FVector(
+			0,
+			0,
+			ZMC->GetCrouchedHalfHeight() - ZippyCharacter->GetClass()->GetDefaultObject<ACharacter>()->GetCapsuleComponent()->GetScaledCapsuleHalfHeight()
+		);
 		FVector Offset = FMath::Lerp(FVector::ZeroVector, TargetCrouchOffset, FMath::Clamp(CrouchBlendTime / CrouchBlendDuration, 0.f, 1.f));
 
 		if (ZMC->IsCrouching())
