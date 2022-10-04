@@ -108,8 +108,6 @@ FCollisionQueryParams AZippyCharacter::GetIgnoreCharacterParams() const
 
 	TArray<AActor*> CharacterChildren;
 	GetAllChildActors(CharacterChildren);
-
-	GetAllChildActors(CharacterChildren);
 	Params.AddIgnoredActors(CharacterChildren);
 	Params.AddIgnoredActor(this);
 
