@@ -38,7 +38,7 @@ protected:
 public:
 	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE UCameraComponent* GetFollowCamera() const { return FollowCamera; }
-	FORCEINLINE UZippyCharacterMovementComponent* GetZippyCharacterMovement() const { return ZippyCharacterMovementComponent; }
+	UFUNCTION(BlueprintPure) FORCEINLINE UZippyCharacterMovementComponent* GetZippyCharacterMovement() const { return ZippyCharacterMovementComponent; }
 
 	FCollisionQueryParams GetIgnoreCharacterParams() const;
 
