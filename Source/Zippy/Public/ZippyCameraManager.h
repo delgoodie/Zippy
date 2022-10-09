@@ -11,7 +11,7 @@ class ZIPPY_API AZippyCameraManager : public APlayerCameraManager
 
 	UPROPERTY(EditDefaultsOnly) float CrouchBlendDuration=.2f;
 	float CrouchBlendTime;
-	
+
 public:
 	AZippyCameraManager();
 

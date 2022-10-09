@@ -33,9 +33,6 @@ void AZippyCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float DeltaTime)
 			CrouchBlendTime = FMath::Clamp(CrouchBlendTime - DeltaTime, 0.f, CrouchBlendDuration);
 		}
 
-		if (ZMC->IsMovingOnGround())
-		{
-			OutVT.POV.Location += Offset;
-		}
+		OutVT.POV.Location += Offset;
 	}
 }
