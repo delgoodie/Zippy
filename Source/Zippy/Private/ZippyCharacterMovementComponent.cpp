@@ -50,6 +50,7 @@ void UZippyCharacterMovementComponent::FSavedMove_Zippy::SetMoveFor(ACharacter* 
 
 	Saved_bWantsToSprint = CharacterMovement->Safe_bWantsToSprint;
 	Saved_bPrevWantsToCrouch = CharacterMovement->Safe_bPrevWantsToCrouch;
+	Saved_bWantsToProne = CharacterMovement->Safe_bWantsToProne;
 }
 
 void UZippyCharacterMovementComponent::FSavedMove_Zippy::PrepMoveFor(ACharacter* C)
@@ -60,6 +61,7 @@ void UZippyCharacterMovementComponent::FSavedMove_Zippy::PrepMoveFor(ACharacter*
 
 	CharacterMovement->Safe_bWantsToSprint = Saved_bWantsToSprint;
 	CharacterMovement->Safe_bPrevWantsToCrouch = Saved_bPrevWantsToCrouch;
+	CharacterMovement->Safe_bWantsToProne = Saved_bWantsToProne;
 }
 
 #pragma endregion
@@ -133,17 +135,15 @@ float UZippyCharacterMovementComponent::GetMaxSpeed() const
 	case CMOVE_Slide:
 		return MaxSlideSpeed;
 	case CMOVE_Prone:
-		return Prone_MaxSpeed;
+		return ProneMaxSpeed;
 	default:
 		UE_LOG(LogTemp, Fatal, TEXT("Invalid Movement Mode"))
 		return -1.f;
 	}
 }
-
 float UZippyCharacterMovementComponent::GetMaxBrakingDeceleration() const
 {
 	if (MovementMode != MOVE_Custom) return Super::GetMaxBrakingDeceleration();
-
 
 	switch (CustomMovementMode)
 	{
@@ -173,10 +173,21 @@ void UZippyCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float 
 		SetMovementMode(MOVE_Walking);
 	}
 
+	if (Safe_bWantsToProne) 
+	{
+		if (CanProne())
+		{
+			SetMovementMode(MOVE_Custom, CMOVE_Prone);
+			if (!CharacterOwner->HasAuthority()) Server_EnterProne();
+		}
+		Safe_bWantsToProne = false;
+	}
+
 	if (IsCustomMovementMode(CMOVE_Prone) && !bWantsToCrouch)
 	{
 		SetMovementMode(MOVE_Walking);
 	}
+
 	
 	Super::UpdateCharacterStateBeforeMovement(DeltaSeconds);
 }
@@ -456,18 +467,9 @@ void UZippyCharacterMovementComponent::PhysSlide(float deltaTime, int32 Iteratio
 
 void UZippyCharacterMovementComponent::Server_EnterProne_Implementation()
 {
-	TryEnterProne();
+	Safe_bWantsToProne = true;
 }
 
-void UZippyCharacterMovementComponent::TryEnterProne()
-{
-	if (IsCustomMovementMode(CMOVE_Slide) || IsMovementMode(MOVE_Walking) && IsCrouching())
-	{
-		SetMovementMode(MOVE_Custom, CMOVE_Prone);
-		
-		if (!CharacterOwner->HasAuthority()) Server_EnterProne();
-	}
-}
 void UZippyCharacterMovementComponent::EnterProne(EMovementMode PrevMode, ECustomMovementMode PrevCustomMode)
 {
 	bWantsToCrouch = true;
@@ -478,11 +480,14 @@ void UZippyCharacterMovementComponent::EnterProne(EMovementMode PrevMode, ECusto
 	}
 
 	FindFloor(UpdatedComponent->GetComponentLocation(), CurrentFloor, true, NULL);
-	
-	SetMovementMode(MOVE_Custom, CMOVE_Prone);
 }
 void UZippyCharacterMovementComponent::ExitProne()
 {
+}
+
+bool UZippyCharacterMovementComponent::CanProne() const
+{
+	return IsCustomMovementMode(CMOVE_Slide) || IsMovementMode(MOVE_Walking) && IsCrouching();
 }
 
 void UZippyCharacterMovementComponent::PhysProne(float deltaTime, int32 Iterations)
@@ -528,7 +533,7 @@ void UZippyCharacterMovementComponent::PhysProne(float deltaTime, int32 Iteratio
 		
 		// Compute move parameters
 		const FVector MoveVelocity = Velocity;
-		const FVector Delta = timeTick * MoveVelocity;
+		const FVector Delta = timeTick * MoveVelocity; // dx = v * dt
 		const bool bZeroDelta = Delta.IsNearlyZero();
 		FStepDownResult StepDownResult;
 
@@ -587,7 +592,7 @@ void UZippyCharacterMovementComponent::PhysProne(float deltaTime, int32 Iteratio
 				bTriedLedgeMove = true;
 
 				// Try new movement direction
-				Velocity = NewDelta/timeTick;
+				Velocity = NewDelta/timeTick; // v = dx/dt
 				remainingTime += timeTick;
 				continue;
 			}
@@ -613,17 +618,6 @@ void UZippyCharacterMovementComponent::PhysProne(float deltaTime, int32 Iteratio
 			// Validate the floor check
 			if (CurrentFloor.IsWalkableFloor())
 			{
-				if (ShouldCatchAir(OldFloor, CurrentFloor))
-				{
-					HandleWalkingOffLedge(OldFloor.HitResult.ImpactNormal, OldFloor.HitResult.Normal, OldLocation, timeTick);
-					if (IsMovingOnGround())
-					{
-						// If still walking, then fall. If not, assume the user set a different mode they want to keep.
-						StartFalling(Iterations, remainingTime, timeTick, Delta, OldLocation);
-					}
-					return;
-				}
-
 				AdjustFloorHeight();
 				SetBase(CurrentFloor.HitResult.Component.Get(), CurrentFloor.HitResult.BoneName);
 			}
