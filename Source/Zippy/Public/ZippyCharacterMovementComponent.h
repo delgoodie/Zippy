@@ -38,7 +38,6 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		uint8 Saved_bPrevWantsToCrouch:1;
 		uint8 Saved_bWantsToProne:1;
 
-
 		FSavedMove_Zippy();
 
 		virtual bool CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* InCharacter, float MaxDelta) const override;
@@ -68,10 +67,9 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 	UPROPERTY(EditDefaultsOnly) float SlideFrictionFactor=.06f;
 	UPROPERTY(EditDefaultsOnly) float BrakingDecelerationSliding=1000.f;
 
-
 	UPROPERTY(EditDefaultsOnly) float Prone_EnterHoldDuration=.2f;
 	UPROPERTY(EditDefaultsOnly) float ProneSlideEnterImpulse=300.f;
-	UPROPERTY(EditDefaultsOnly) float ProneMaxSpeed=300.f;
+	UPROPERTY(EditDefaultsOnly) float MaxProneSpeed=300.f;
 	UPROPERTY(EditDefaultsOnly) float BrakingDecelerationProning=2500.f;
 	
 
@@ -79,9 +77,10 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 	UPROPERTY(Transient) AZippyCharacter* ZippyCharacterOwner;
 	bool Safe_bWantsToSprint;
 	bool Safe_bPrevWantsToCrouch;
-
-	bool Safe_bWantsToProne; 
+	bool Safe_bWantsToProne;
 	FTimerHandle TimerHandle_EnterProne;
+
+
 
 public:
 	UZippyCharacterMovementComponent();
@@ -96,7 +95,7 @@ public:
 	virtual bool CanCrouchInCurrentState() const override;
 	virtual float GetMaxSpeed() const override;
 	virtual float GetMaxBrakingDeceleration() const override;
-
+	
 protected:
 	virtual void UpdateFromCompressedFlags(uint8 Flags) override;
 public:
@@ -115,16 +114,14 @@ private:
 
 	// Prone
 private:
-	UFUNCTION(Server, Reliable) void Server_EnterProne();
-
 	void TryEnterProne() { Safe_bWantsToProne = true; }
-
+	UFUNCTION(Server, Reliable) void Server_EnterProne();
+	
 	void EnterProne(EMovementMode PrevMode, ECustomMovementMode PrevCustomMode);
 	void ExitProne();
 	bool CanProne() const;
 	void PhysProne(float deltaTime, int32 Iterations);
 	
-
 	// Interface
 public:
 	UFUNCTION(BlueprintCallable) void SprintPressed();

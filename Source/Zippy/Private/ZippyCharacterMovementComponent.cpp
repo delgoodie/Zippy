@@ -1,5 +1,3 @@
-
-
 #include "ZippyCharacterMovementComponent.h"
 
 #include "ZippyCharacter.h"
@@ -135,7 +133,7 @@ float UZippyCharacterMovementComponent::GetMaxSpeed() const
 	case CMOVE_Slide:
 		return MaxSlideSpeed;
 	case CMOVE_Prone:
-		return ProneMaxSpeed;
+		return MaxProneSpeed;
 	default:
 		UE_LOG(LogTemp, Fatal, TEXT("Invalid Movement Mode"))
 		return -1.f;
@@ -156,7 +154,6 @@ float UZippyCharacterMovementComponent::GetMaxBrakingDeceleration() const
 		return -1.f;
 	}
 }
-
 // Movement Pipeline
 void UZippyCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSeconds)
 {
@@ -188,7 +185,6 @@ void UZippyCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float 
 		SetMovementMode(MOVE_Walking);
 	}
 
-	
 	Super::UpdateCharacterStateBeforeMovement(DeltaSeconds);
 }
 void UZippyCharacterMovementComponent::OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity)
@@ -220,7 +216,7 @@ void UZippyCharacterMovementComponent::OnMovementModeChanged(EMovementMode Previ
 
 	if (PreviousMovementMode == MOVE_Custom && PreviousCustomMode == CMOVE_Slide) ExitSlide();
 	if (PreviousMovementMode == MOVE_Custom && PreviousCustomMode == CMOVE_Prone) ExitProne();
-
+	
 	if (IsCustomMovementMode(CMOVE_Slide)) EnterSlide(PreviousMovementMode, (ECustomMovementMode)PreviousCustomMode);
 	if (IsCustomMovementMode(CMOVE_Prone)) EnterProne(PreviousMovementMode, (ECustomMovementMode)PreviousCustomMode);
 }
@@ -236,8 +232,6 @@ void UZippyCharacterMovementComponent::EnterSlide(EMovementMode PrevMode, ECusto
 	Velocity += Velocity.GetSafeNormal2D() * SlideEnterImpulse;
 
 	FindFloor(UpdatedComponent->GetComponentLocation(), CurrentFloor, true, NULL);
-	
-	SetMovementMode(MOVE_Custom, CMOVE_Slide);
 }
 void UZippyCharacterMovementComponent::ExitSlide()
 {
@@ -651,11 +645,6 @@ void UZippyCharacterMovementComponent::PhysProne(float deltaTime, int32 Iteratio
 			}
 		}
 		
-		
-		
-		
-		
-		
 		// Allow overlap events and such to change physics state and velocity
 		if (IsMovingOnGround())
 		{
@@ -663,7 +652,7 @@ void UZippyCharacterMovementComponent::PhysProne(float deltaTime, int32 Iteratio
 			if( !bJustTeleported && !HasAnimRootMotion() && !CurrentRootMotion.HasOverrideVelocity() && timeTick >= MIN_TICK_TIME)
 			{
 				// TODO-RootMotionSource: Allow this to happen during partial override Velocity, but only set allowed axes?
-				Velocity = (UpdatedComponent->GetComponentLocation() - OldLocation) / timeTick;
+				Velocity = (UpdatedComponent->GetComponentLocation() - OldLocation) / timeTick; // v = dx / dt
 				MaintainHorizontalGroundVelocity();
 			}
 		}
@@ -704,6 +693,7 @@ void UZippyCharacterMovementComponent::CrouchReleased()
 {
 	GetWorld()->GetTimerManager().ClearTimer(TimerHandle_EnterProne);
 }
+
 
 bool UZippyCharacterMovementComponent::IsCustomMovementMode(ECustomMovementMode InCustomMovementMode) const
 {
