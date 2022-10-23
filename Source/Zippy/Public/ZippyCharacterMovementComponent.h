@@ -5,6 +5,8 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "ZippyCharacterMovementComponent.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDashStartDelegate);
+
 UENUM(BlueprintType)
 enum ECustomMovementMode
 {
@@ -26,13 +28,14 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		enum CompressedFlags
 		{
 			FLAG_Sprint			= 0x10,
-			FLAG_Custom_1		= 0x20,
+			FLAG_Dash			= 0x20,
 			FLAG_Custom_2		= 0x40,
 			FLAG_Custom_3		= 0x80,
 		};
 		
 		// Flags
 		uint8 Saved_bWantsToSprint:1;
+		uint8 Saved_bWantsToDash:1;
 
 		// Other Variables
 		uint8 Saved_bPrevWantsToCrouch:1;
@@ -58,29 +61,46 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 	};
 
 	// Parameters
-	UPROPERTY(EditDefaultsOnly) float MaxSprintSpeed=750.f;
+		UPROPERTY(EditDefaultsOnly) float MaxSprintSpeed=750.f;
 
-	UPROPERTY(EditDefaultsOnly) float MinSlideSpeed=400.f;
-	UPROPERTY(EditDefaultsOnly) float MaxSlideSpeed=400.f;
-	UPROPERTY(EditDefaultsOnly) float SlideEnterImpulse=400.f;
-	UPROPERTY(EditDefaultsOnly) float SlideGravityForce=4000.f;
-	UPROPERTY(EditDefaultsOnly) float SlideFrictionFactor=.06f;
-	UPROPERTY(EditDefaultsOnly) float BrakingDecelerationSliding=1000.f;
+		// Slide
+		UPROPERTY(EditDefaultsOnly) float MinSlideSpeed=400.f;
+		UPROPERTY(EditDefaultsOnly) float MaxSlideSpeed=400.f;
+		UPROPERTY(EditDefaultsOnly) float SlideEnterImpulse=400.f;
+		UPROPERTY(EditDefaultsOnly) float SlideGravityForce=4000.f;
+		UPROPERTY(EditDefaultsOnly) float SlideFrictionFactor=.06f;
+		UPROPERTY(EditDefaultsOnly) float BrakingDecelerationSliding=1000.f;
 
-	UPROPERTY(EditDefaultsOnly) float Prone_EnterHoldDuration=.2f;
-	UPROPERTY(EditDefaultsOnly) float ProneSlideEnterImpulse=300.f;
-	UPROPERTY(EditDefaultsOnly) float MaxProneSpeed=300.f;
-	UPROPERTY(EditDefaultsOnly) float BrakingDecelerationProning=2500.f;
-	
+		// Prone
+		UPROPERTY(EditDefaultsOnly) float ProneEnterHoldDuration=.2f;
+		UPROPERTY(EditDefaultsOnly) float ProneSlideEnterImpulse=300.f;
+		UPROPERTY(EditDefaultsOnly) float MaxProneSpeed=300.f;
+		UPROPERTY(EditDefaultsOnly) float BrakingDecelerationProning=2500.f;
+
+		// Dash
+		UPROPERTY(EditDefaultsOnly) float DashImpulse=1000.f;
+		UPROPERTY(EditDefaultsOnly) float DashCooldownDuration=1.f;
+	UPROPERTY(EditDefaultsOnly) float AuthDashCooldownDuration=.9f;
 
 	// Transient
-	UPROPERTY(Transient) AZippyCharacter* ZippyCharacterOwner;
-	bool Safe_bWantsToSprint;
-	bool Safe_bPrevWantsToCrouch;
-	bool Safe_bWantsToProne;
-	FTimerHandle TimerHandle_EnterProne;
+		UPROPERTY(Transient) AZippyCharacter* ZippyCharacterOwner;
 
+		// Flags
+		bool Safe_bWantsToSprint;
+		bool Safe_bWantsToDash;
+		bool Safe_bWantsToProne;
+	
+		bool Safe_bPrevWantsToCrouch;
+		float DashStartTime;
+		FTimerHandle TimerHandle_EnterProne;
+		FTimerHandle TimerHandle_DashCooldown;
 
+	// Replicated
+	UPROPERTY(ReplicatedUsing=OnRep_DashStart) bool Proxy_bDashStart;
+
+	// Delegates
+public:
+	UPROPERTY(BlueprintAssignable) FDashStartDelegate DashStartDelegate;
 
 public:
 	UZippyCharacterMovementComponent();
@@ -114,13 +134,19 @@ private:
 
 	// Prone
 private:
-	void TryEnterProne() { Safe_bWantsToProne = true; }
+	void OnTryEnterProne() { Safe_bWantsToProne = true; }
 	UFUNCTION(Server, Reliable) void Server_EnterProne();
 	
 	void EnterProne(EMovementMode PrevMode, ECustomMovementMode PrevCustomMode);
 	void ExitProne();
 	bool CanProne() const;
 	void PhysProne(float deltaTime, int32 Iterations);
+
+	// Dash
+private:
+	void OnDashCooldownFinished();
+	bool CanDash() const;
+	void PerformDash();
 	
 	// Interface
 public:
@@ -130,6 +156,15 @@ public:
 	UFUNCTION(BlueprintCallable) void CrouchPressed();
 	UFUNCTION(BlueprintCallable) void CrouchReleased();
 
+	UFUNCTION(BlueprintCallable) void DashPressed();
+	UFUNCTION(BlueprintCallable) void DashReleased();
+	
 	UFUNCTION(BlueprintPure) bool IsCustomMovementMode(ECustomMovementMode InCustomMovementMode) const;
 	UFUNCTION(BlueprintPure) bool IsMovementMode(EMovementMode InMovementMode) const;
+
+	// Proxy Replication
+public:
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+private:
+	UFUNCTION() void OnRep_DashStart();
 };

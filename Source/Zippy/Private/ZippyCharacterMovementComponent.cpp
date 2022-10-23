@@ -3,6 +3,7 @@
 #include "ZippyCharacter.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Character.h"
+#include "Net/UnrealNetwork.h"
 
 
 #pragma region Saved Move
@@ -20,6 +21,11 @@ bool UZippyCharacterMovementComponent::FSavedMove_Zippy::CanCombineWith(const FS
 	{
 		return false;
 	}
+
+	if (Saved_bWantsToDash != NewZippyMove->Saved_bWantsToDash)
+	{
+		return false;
+	}
 	
 	return FSavedMove_Character::CanCombineWith(NewMove, InCharacter, MaxDelta);
 }
@@ -29,6 +35,10 @@ void UZippyCharacterMovementComponent::FSavedMove_Zippy::Clear()
 	FSavedMove_Character::Clear();
 
 	Saved_bWantsToSprint = 0;
+	Saved_bWantsToDash = 0;
+	
+	Saved_bWantsToProne = 0;
+	Saved_bPrevWantsToCrouch = 0;
 }
 
 uint8 UZippyCharacterMovementComponent::FSavedMove_Zippy::GetCompressedFlags() const
@@ -36,6 +46,7 @@ uint8 UZippyCharacterMovementComponent::FSavedMove_Zippy::GetCompressedFlags() c
 	uint8 Result = FSavedMove_Character::GetCompressedFlags();
 
 	if (Saved_bWantsToSprint) Result |= FLAG_Sprint;
+	if (Saved_bWantsToDash) Result |= FLAG_Dash;
 
 	return Result;
 }
@@ -49,6 +60,7 @@ void UZippyCharacterMovementComponent::FSavedMove_Zippy::SetMoveFor(ACharacter* 
 	Saved_bWantsToSprint = CharacterMovement->Safe_bWantsToSprint;
 	Saved_bPrevWantsToCrouch = CharacterMovement->Safe_bPrevWantsToCrouch;
 	Saved_bWantsToProne = CharacterMovement->Safe_bWantsToProne;
+	Saved_bWantsToDash = CharacterMovement->Safe_bWantsToDash;
 }
 
 void UZippyCharacterMovementComponent::FSavedMove_Zippy::PrepMoveFor(ACharacter* C)
@@ -60,6 +72,7 @@ void UZippyCharacterMovementComponent::FSavedMove_Zippy::PrepMoveFor(ACharacter*
 	CharacterMovement->Safe_bWantsToSprint = Saved_bWantsToSprint;
 	CharacterMovement->Safe_bPrevWantsToCrouch = Saved_bPrevWantsToCrouch;
 	CharacterMovement->Safe_bWantsToProne = Saved_bWantsToProne;
+	CharacterMovement->Safe_bWantsToDash = Saved_bWantsToDash;
 }
 
 #pragma endregion
@@ -98,6 +111,7 @@ void UZippyCharacterMovementComponent::UpdateFromCompressedFlags(uint8 Flags)
 	Super::UpdateFromCompressedFlags(Flags);
 
 	Safe_bWantsToSprint = (Flags & FSavedMove_Zippy::FLAG_Sprint) != 0;
+	Safe_bWantsToDash = (Flags & FSavedMove_Zippy::FLAG_Dash) != 0;
 }
 FNetworkPredictionData_Client* UZippyCharacterMovementComponent::GetPredictionData_Client() const
 {
@@ -157,6 +171,7 @@ float UZippyCharacterMovementComponent::GetMaxBrakingDeceleration() const
 // Movement Pipeline
 void UZippyCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSeconds)
 {
+	// Slide
 	if (MovementMode == MOVE_Walking && !bWantsToCrouch && Safe_bPrevWantsToCrouch)
 	{
 		if (CanSlide())
@@ -164,12 +179,12 @@ void UZippyCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float 
 			SetMovementMode(MOVE_Custom, CMOVE_Slide);
 		}
 	}
-
 	if (IsCustomMovementMode(CMOVE_Slide) && !bWantsToCrouch)
 	{
 		SetMovementMode(MOVE_Walking);
 	}
 
+	// Prone
 	if (Safe_bWantsToProne) 
 	{
 		if (CanProne())
@@ -179,19 +194,32 @@ void UZippyCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float 
 		}
 		Safe_bWantsToProne = false;
 	}
-
 	if (IsCustomMovementMode(CMOVE_Prone) && !bWantsToCrouch)
 	{
 		SetMovementMode(MOVE_Walking);
 	}
 
+	// Dash
+	bool bAuthProxy = CharacterOwner->HasAuthority() && !CharacterOwner->IsLocallyControlled();
+	if (Safe_bWantsToDash && CanDash())
+	{
+		if (!bAuthProxy || GetWorld()->GetTimeSeconds() - DashStartTime > AuthDashCooldownDuration)
+		{
+			PerformDash();
+			Safe_bWantsToDash = false;
+			Proxy_bDashStart = true;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Client tried to cheat"))
+		}
+	}
+	else
+	{
+		Proxy_bDashStart = false;
+	}
+	
 	Super::UpdateCharacterStateBeforeMovement(DeltaSeconds);
-}
-void UZippyCharacterMovementComponent::OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity)
-{
-	Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
-
-	Safe_bPrevWantsToCrouch = bWantsToCrouch;
 }
 void UZippyCharacterMovementComponent::PhysCustom(float deltaTime, int32 Iterations)
 {
@@ -209,6 +237,13 @@ void UZippyCharacterMovementComponent::PhysCustom(float deltaTime, int32 Iterati
 		UE_LOG(LogTemp, Fatal, TEXT("Invalid Movement Mode"))
 	}
 }
+void UZippyCharacterMovementComponent::OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity)
+{
+	Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
+
+	Safe_bPrevWantsToCrouch = bWantsToCrouch;
+}
+
 // Movement Event
 void UZippyCharacterMovementComponent::OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode)
 {
@@ -673,6 +708,37 @@ void UZippyCharacterMovementComponent::PhysProne(float deltaTime, int32 Iteratio
 
 #pragma endregion
 
+#pragma region Dash
+
+void UZippyCharacterMovementComponent::OnDashCooldownFinished()
+{
+	Safe_bWantsToDash = true;
+}
+
+bool UZippyCharacterMovementComponent::CanDash() const
+{
+	return IsWalking() && !IsCrouching();
+}
+
+void UZippyCharacterMovementComponent::PerformDash()
+{
+	DashStartTime = GetWorld()->GetTimeSeconds();
+
+	FVector DashDirection = (Acceleration.IsNearlyZero() ? UpdatedComponent->GetForwardVector() : Acceleration).GetSafeNormal2D();
+	DashDirection += FVector::UpVector * .1f;
+	Velocity = DashImpulse * DashDirection;
+
+	FQuat NewRotation = FRotationMatrix::MakeFromXZ(DashDirection, FVector::UpVector).ToQuat();
+	FHitResult Hit;
+	SafeMoveUpdatedComponent(FVector::ZeroVector, NewRotation, false, Hit);
+
+	SetMovementMode(MOVE_Falling);
+
+	DashStartDelegate.Broadcast();
+}
+
+#pragma endregion
+
 #pragma region Interface
 
 void UZippyCharacterMovementComponent::SprintPressed()
@@ -687,13 +753,30 @@ void UZippyCharacterMovementComponent::SprintReleased()
 void UZippyCharacterMovementComponent::CrouchPressed()
 {
 	bWantsToCrouch = !bWantsToCrouch;
-	GetWorld()->GetTimerManager().SetTimer(TimerHandle_EnterProne, this, &UZippyCharacterMovementComponent::TryEnterProne, Prone_EnterHoldDuration);
+	GetWorld()->GetTimerManager().SetTimer(TimerHandle_EnterProne, this, &UZippyCharacterMovementComponent::OnTryEnterProne, ProneEnterHoldDuration);
 }
 void UZippyCharacterMovementComponent::CrouchReleased()
 {
 	GetWorld()->GetTimerManager().ClearTimer(TimerHandle_EnterProne);
 }
 
+void UZippyCharacterMovementComponent::DashPressed()
+{
+	float CurrentTime = GetWorld()->GetTimeSeconds();
+	if (CurrentTime - DashStartTime >= DashCooldownDuration)
+	{
+		Safe_bWantsToDash = true;
+	}
+	else
+	{
+		GetWorld()->GetTimerManager().SetTimer(TimerHandle_DashCooldown, this, &UZippyCharacterMovementComponent::OnDashCooldownFinished, DashCooldownDuration - (CurrentTime - DashStartTime));
+	}
+}
+void UZippyCharacterMovementComponent::DashReleased()
+{
+	GetWorld()->GetTimerManager().ClearTimer(TimerHandle_DashCooldown);
+	Safe_bWantsToDash = false;
+}
 
 bool UZippyCharacterMovementComponent::IsCustomMovementMode(ECustomMovementMode InCustomMovementMode) const
 {
@@ -702,6 +785,18 @@ bool UZippyCharacterMovementComponent::IsCustomMovementMode(ECustomMovementMode 
 bool UZippyCharacterMovementComponent::IsMovementMode(EMovementMode InMovementMode) const
 {
 	return InMovementMode == MovementMode;
+}
+
+void UZippyCharacterMovementComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME_CONDITION(UZippyCharacterMovementComponent, Proxy_bDashStart, COND_SkipOwner)
+}
+
+void UZippyCharacterMovementComponent::OnRep_DashStart()
+{
+	DashStartDelegate.Broadcast();
 }
 
 #pragma endregion
