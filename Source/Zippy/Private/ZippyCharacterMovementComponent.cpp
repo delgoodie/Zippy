@@ -11,6 +11,8 @@
 UZippyCharacterMovementComponent::FSavedMove_Zippy::FSavedMove_Zippy()
 {
 	Saved_bWantsToSprint=0;
+	Saved_bWantsToProne=0;
+	Saved_bPrevWantsToCrouch=0;
 }
 
 bool UZippyCharacterMovementComponent::FSavedMove_Zippy::CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* InCharacter, float MaxDelta) const
@@ -36,7 +38,7 @@ void UZippyCharacterMovementComponent::FSavedMove_Zippy::Clear()
 
 	Saved_bWantsToSprint = 0;
 	Saved_bWantsToDash = 0;
-	
+
 	Saved_bWantsToProne = 0;
 	Saved_bPrevWantsToCrouch = 0;
 }
@@ -207,16 +209,12 @@ void UZippyCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float 
 		{
 			PerformDash();
 			Safe_bWantsToDash = false;
-			Proxy_bDashStart = true;
+			Proxy_bDashStart = !Proxy_bDashStart;
 		}
 		else
 		{
 			UE_LOG(LogTemp, Warning, TEXT("Client tried to cheat"))
 		}
-	}
-	else
-	{
-		Proxy_bDashStart = false;
 	}
 	
 	Super::UpdateCharacterStateBeforeMovement(DeltaSeconds);
@@ -725,8 +723,7 @@ void UZippyCharacterMovementComponent::PerformDash()
 	DashStartTime = GetWorld()->GetTimeSeconds();
 
 	FVector DashDirection = (Acceleration.IsNearlyZero() ? UpdatedComponent->GetForwardVector() : Acceleration).GetSafeNormal2D();
-	DashDirection += FVector::UpVector * .1f;
-	Velocity = DashImpulse * DashDirection;
+	Velocity = DashImpulse * (DashDirection + FVector::UpVector * .1f);
 
 	FQuat NewRotation = FRotationMatrix::MakeFromXZ(DashDirection, FVector::UpVector).ToQuat();
 	FHitResult Hit;
@@ -787,6 +784,10 @@ bool UZippyCharacterMovementComponent::IsMovementMode(EMovementMode InMovementMo
 	return InMovementMode == MovementMode;
 }
 
+#pragma endregion
+
+#pragma region Replication
+
 void UZippyCharacterMovementComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -796,7 +797,7 @@ void UZippyCharacterMovementComponent::GetLifetimeReplicatedProps(TArray<FLifeti
 
 void UZippyCharacterMovementComponent::OnRep_DashStart()
 {
-	DashStartDelegate.Broadcast();
+    DashStartDelegate.Broadcast();
 }
 
 #pragma endregion

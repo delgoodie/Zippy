@@ -12,7 +12,8 @@ AZippyCharacter::AZippyCharacter(const FObjectInitializer& ObjectInitializer)
 : Super(ObjectInitializer.SetDefaultSubobjectClass<UZippyCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
 	ZippyCharacterMovementComponent = Cast<UZippyCharacterMovementComponent>(GetCharacterMovement());
-	
+	ZippyCharacterMovementComponent->SetIsReplicated(true);
+
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
 
 	TurnRateGamepad = 50.f;

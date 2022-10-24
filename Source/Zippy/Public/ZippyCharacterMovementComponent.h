@@ -80,23 +80,23 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		// Dash
 		UPROPERTY(EditDefaultsOnly) float DashImpulse=1000.f;
 		UPROPERTY(EditDefaultsOnly) float DashCooldownDuration=1.f;
-	UPROPERTY(EditDefaultsOnly) float AuthDashCooldownDuration=.9f;
+		UPROPERTY(EditDefaultsOnly) float AuthDashCooldownDuration=.9f;
 
 	// Transient
 		UPROPERTY(Transient) AZippyCharacter* ZippyCharacterOwner;
 
 		// Flags
 		bool Safe_bWantsToSprint;
-		bool Safe_bWantsToDash;
 		bool Safe_bWantsToProne;
+		bool Safe_bWantsToDash;
 	
 		bool Safe_bPrevWantsToCrouch;
 		float DashStartTime;
 		FTimerHandle TimerHandle_EnterProne;
 		FTimerHandle TimerHandle_DashCooldown;
 
-	// Replicated
-	UPROPERTY(ReplicatedUsing=OnRep_DashStart) bool Proxy_bDashStart;
+	// Replication
+		UPROPERTY(ReplicatedUsing=OnRep_DashStart) bool Proxy_bDashStart;
 
 	// Delegates
 public:
@@ -145,6 +145,7 @@ private:
 	// Dash
 private:
 	void OnDashCooldownFinished();
+
 	bool CanDash() const;
 	void PerformDash();
 	
@@ -155,7 +156,7 @@ public:
 
 	UFUNCTION(BlueprintCallable) void CrouchPressed();
 	UFUNCTION(BlueprintCallable) void CrouchReleased();
-
+	
 	UFUNCTION(BlueprintCallable) void DashPressed();
 	UFUNCTION(BlueprintCallable) void DashReleased();
 	
