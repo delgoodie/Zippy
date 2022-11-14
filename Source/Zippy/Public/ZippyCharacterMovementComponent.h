@@ -78,9 +78,9 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		UPROPERTY(EditDefaultsOnly) float BrakingDecelerationProning=2500.f;
 
 		// Dash
-		UPROPERTY(EditDefaultsOnly) float DashImpulse=1000.f;
 		UPROPERTY(EditDefaultsOnly) float DashCooldownDuration=1.f;
 		UPROPERTY(EditDefaultsOnly) float AuthDashCooldownDuration=.9f;
+		UPROPERTY(EditDefaultsOnly) UAnimMontage* DashMontage;
 
 	// Transient
 		UPROPERTY(Transient) AZippyCharacter* ZippyCharacterOwner;

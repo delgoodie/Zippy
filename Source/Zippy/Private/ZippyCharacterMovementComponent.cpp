@@ -239,6 +239,8 @@ void UZippyCharacterMovementComponent::OnMovementUpdated(float DeltaSeconds, con
 {
 	Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
 
+	if (IsMovementMode(MOVE_Flying) && !HasRootMotionSources()) SetMovementMode(MOVE_Walking);
+	
 	Safe_bPrevWantsToCrouch = bWantsToCrouch;
 }
 
@@ -715,22 +717,17 @@ void UZippyCharacterMovementComponent::OnDashCooldownFinished()
 
 bool UZippyCharacterMovementComponent::CanDash() const
 {
-	return IsWalking() && !IsCrouching();
+	return IsWalking() && !IsCrouching() || IsFalling();
 }
 
 void UZippyCharacterMovementComponent::PerformDash()
 {
 	DashStartTime = GetWorld()->GetTimeSeconds();
-
-	FVector DashDirection = (Acceleration.IsNearlyZero() ? UpdatedComponent->GetForwardVector() : Acceleration).GetSafeNormal2D();
-	Velocity = DashImpulse * (DashDirection + FVector::UpVector * .1f);
-
-	FQuat NewRotation = FRotationMatrix::MakeFromXZ(DashDirection, FVector::UpVector).ToQuat();
-	FHitResult Hit;
-	SafeMoveUpdatedComponent(FVector::ZeroVector, NewRotation, false, Hit);
-
-	SetMovementMode(MOVE_Falling);
-
+	
+	SetMovementMode(MOVE_Flying);
+	
+	CharacterOwner->PlayAnimMontage(DashMontage);
+	
 	DashStartDelegate.Broadcast();
 }
 
@@ -797,6 +794,7 @@ void UZippyCharacterMovementComponent::GetLifetimeReplicatedProps(TArray<FLifeti
 
 void UZippyCharacterMovementComponent::OnRep_DashStart()
 {
+	CharacterOwner->PlayAnimMontage(DashMontage);
     DashStartDelegate.Broadcast();
 }
 
