@@ -85,9 +85,8 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		UPROPERTY(EditDefaultsOnly) UAnimMontage* DashMontage;
 
 		// Mantle
-		UPROPERTY(EditDefaultsOnly) float MaxMantleDistance = 200;
+		UPROPERTY(EditDefaultsOnly) float MantleMaxDistance = 200;
     	UPROPERTY(EditDefaultsOnly) float MantleReachHeight = 50;
-    	UPROPERTY(EditDefaultsOnly) float MaxVaultDepth = 100;
     	UPROPERTY(EditDefaultsOnly) float MinMantleDepth = 30;
     	UPROPERTY(EditDefaultsOnly) float MantleMinWallSteepnessAngle = 75;
     	UPROPERTY(EditDefaultsOnly) float MantleMaxSurfaceAngle = 40;
@@ -96,7 +95,6 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		UPROPERTY(EditDefaultsOnly) UAnimMontage* TransitionTallMantleMontage;
 		UPROPERTY(EditDefaultsOnly) UAnimMontage* ShortMantleMontage;
 		UPROPERTY(EditDefaultsOnly) UAnimMontage* TransitionShortMantleMontage;
-		UPROPERTY(EditDefaultsOnly) UAnimMontage* VaultMontage;
 
 	// Transient
 		UPROPERTY(Transient) AZippyCharacter* ZippyCharacterOwner;
@@ -114,6 +112,7 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		FTimerHandle TimerHandle_DashCooldown;
 		TSharedPtr<FRootMotionSource_MoveToForce> TransitionRMS;
 		UPROPERTY(Transient) UAnimMontage* TransitionQueuedMontage;
+		float TransitionQueuedMontageSpeed;
 		int TransitionRMS_ID;
 
 	// Replication
