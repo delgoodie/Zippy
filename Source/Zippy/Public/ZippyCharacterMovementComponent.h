@@ -34,10 +34,12 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		};
 		
 		// Flags
+		uint8 Saved_bPressedZippyJump:1;
 		uint8 Saved_bWantsToSprint:1;
 		uint8 Saved_bWantsToDash:1;
 
 		// Other Variables
+		uint8 Saved_bWasRootMotion:1;
 		uint8 Saved_bPrevWantsToCrouch:1;
 		uint8 Saved_bWantsToProne:1;
 
@@ -82,6 +84,20 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		UPROPERTY(EditDefaultsOnly) float AuthDashCooldownDuration=.9f;
 		UPROPERTY(EditDefaultsOnly) UAnimMontage* DashMontage;
 
+		// Mantle
+		UPROPERTY(EditDefaultsOnly) float MaxMantleDistance = 200;
+    	UPROPERTY(EditDefaultsOnly) float MantleReachHeight = 50;
+    	UPROPERTY(EditDefaultsOnly) float MaxVaultDepth = 100;
+    	UPROPERTY(EditDefaultsOnly) float MinMantleDepth = 30;
+    	UPROPERTY(EditDefaultsOnly) float MantleMinWallSteepnessAngle = 75;
+    	UPROPERTY(EditDefaultsOnly) float MantleMaxSurfaceAngle = 40;
+    	UPROPERTY(EditDefaultsOnly) float MantleMaxAlignmentAngle = 45;
+		UPROPERTY(EditDefaultsOnly) UAnimMontage* TallMantleMontage;
+		UPROPERTY(EditDefaultsOnly) UAnimMontage* TransitionTallMantleMontage;
+		UPROPERTY(EditDefaultsOnly) UAnimMontage* ShortMantleMontage;
+		UPROPERTY(EditDefaultsOnly) UAnimMontage* TransitionShortMantleMontage;
+		UPROPERTY(EditDefaultsOnly) UAnimMontage* VaultMontage;
+
 	// Transient
 		UPROPERTY(Transient) AZippyCharacter* ZippyCharacterOwner;
 
@@ -89,11 +105,16 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		bool Safe_bWantsToSprint;
 		bool Safe_bWantsToProne;
 		bool Safe_bWantsToDash;
-	
+
+		bool Safe_bWasRootMotion;
 		bool Safe_bPrevWantsToCrouch;
+	
 		float DashStartTime;
 		FTimerHandle TimerHandle_EnterProne;
 		FTimerHandle TimerHandle_DashCooldown;
+		TSharedPtr<FRootMotionSource_MoveToForce> TransitionRMS;
+		UPROPERTY(Transient) UAnimMontage* TransitionQueuedMontage;
+		int TransitionRMS_ID;
 
 	// Replication
 		UPROPERTY(ReplicatedUsing=OnRep_DashStart) bool Proxy_bDashStart;
@@ -148,6 +169,11 @@ private:
 
 	bool CanDash() const;
 	void PerformDash();
+
+	// Vault
+private:
+	bool TryMantle();
+	
 	
 	// Interface
 public:
@@ -159,7 +185,7 @@ public:
 	
 	UFUNCTION(BlueprintCallable) void DashPressed();
 	UFUNCTION(BlueprintCallable) void DashReleased();
-	
+
 	UFUNCTION(BlueprintPure) bool IsCustomMovementMode(ECustomMovementMode InCustomMovementMode) const;
 	UFUNCTION(BlueprintPure) bool IsMovementMode(EMovementMode InMovementMode) const;
 

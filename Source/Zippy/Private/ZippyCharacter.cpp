@@ -44,8 +44,8 @@ AZippyCharacter::AZippyCharacter(const FObjectInitializer& ObjectInitializer)
 void AZippyCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent)
 {
 	check(PlayerInputComponent);
-	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &ACharacter::Jump);
-	PlayerInputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
+	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &AZippyCharacter::Jump);
+	PlayerInputComponent->BindAction("Jump", IE_Released, this, &AZippyCharacter::StopJumping);
 
 	PlayerInputComponent->BindAxis("Move Forward / Backward", this, &AZippyCharacter::MoveForward);
 	PlayerInputComponent->BindAxis("Move Right / Left", this, &AZippyCharacter::MoveRight);
@@ -67,6 +67,23 @@ void AZippyCharacter::TouchStarted(ETouchIndex::Type FingerIndex, FVector Locati
 void AZippyCharacter::TouchStopped(ETouchIndex::Type FingerIndex, FVector Location)
 {
 	StopJumping();
+}
+
+void AZippyCharacter::Jump()
+{
+	bPressedZippyJump = true;
+
+	Super::Jump();
+	
+	bPressedJump = false;
+
+	UE_LOG(LogTemp, Warning, TEXT("Jump isserver:%d"), HasAuthority())
+}
+
+void AZippyCharacter::StopJumping()
+{
+	bPressedZippyJump = false;
+	Super::StopJumping();
 }
 
 void AZippyCharacter::TurnAtRate(float Rate)

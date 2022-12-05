@@ -20,7 +20,13 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=Input) float TurnRateGamepad;
 
 public:
+	bool bPressedZippyJump;
+	
+public:
 	AZippyCharacter(const FObjectInitializer& ObjectInitializer);
+
+	virtual void Jump() override;
+	virtual void StopJumping() override;
 
 	// Input
 private:
@@ -30,6 +36,8 @@ private:
 	void LookUpAtRate(float Rate);
 	void TouchStarted(ETouchIndex::Type FingerIndex, FVector Location);
 	void TouchStopped(ETouchIndex::Type FingerIndex, FVector Location);
+
+
 
 	// APawn interface
 protected:
