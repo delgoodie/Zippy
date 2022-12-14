@@ -39,7 +39,8 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		uint8 Saved_bWantsToDash:1;
 
 		// Other Variables
-		uint8 Saved_bWasRootMotion:1;
+		uint8 Saved_bHadAnimRootMotion:1;
+		uint8 Saved_bTransitionFinished:1;
 		uint8 Saved_bPrevWantsToCrouch:1;
 		uint8 Saved_bWantsToProne:1;
 
@@ -93,9 +94,11 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
     	UPROPERTY(EditDefaultsOnly) float MantleMaxAlignmentAngle = 45;
 		UPROPERTY(EditDefaultsOnly) UAnimMontage* TallMantleMontage;
 		UPROPERTY(EditDefaultsOnly) UAnimMontage* TransitionTallMantleMontage;
+		UPROPERTY(EditDefaultsOnly) UAnimMontage* ProxyTallMantleMontage;
 		UPROPERTY(EditDefaultsOnly) UAnimMontage* ShortMantleMontage;
 		UPROPERTY(EditDefaultsOnly) UAnimMontage* TransitionShortMantleMontage;
-
+		UPROPERTY(EditDefaultsOnly) UAnimMontage* ProxyShortMantleMontage;
+	
 	// Transient
 		UPROPERTY(Transient) AZippyCharacter* ZippyCharacterOwner;
 
@@ -104,19 +107,25 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		bool Safe_bWantsToProne;
 		bool Safe_bWantsToDash;
 
-		bool Safe_bWasRootMotion;
+		bool Safe_bHadAnimRootMotion;
 		bool Safe_bPrevWantsToCrouch;
-	
+
 		float DashStartTime;
 		FTimerHandle TimerHandle_EnterProne;
 		FTimerHandle TimerHandle_DashCooldown;
+
+		bool Safe_bTransitionFinished;
 		TSharedPtr<FRootMotionSource_MoveToForce> TransitionRMS;
 		UPROPERTY(Transient) UAnimMontage* TransitionQueuedMontage;
 		float TransitionQueuedMontageSpeed;
 		int TransitionRMS_ID;
+	
 
 	// Replication
-		UPROPERTY(ReplicatedUsing=OnRep_DashStart) bool Proxy_bDashStart;
+		UPROPERTY(ReplicatedUsing=OnRep_Dash) bool Proxy_bDash;
+
+		UPROPERTY(ReplicatedUsing=OnRep_ShortMantle) bool Proxy_bShortMantle;
+		UPROPERTY(ReplicatedUsing=OnRep_TallMantle) bool Proxy_bTallMantle;
 
 	// Delegates
 public:
@@ -140,6 +149,7 @@ protected:
 	virtual void UpdateFromCompressedFlags(uint8 Flags) override;
 public:
 	virtual void UpdateCharacterStateBeforeMovement(float DeltaSeconds) override;
+	virtual void UpdateCharacterStateAfterMovement(float DeltaSeconds) override;
 protected:
 	virtual void OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity) override;
 	virtual void PhysCustom(float deltaTime, int32 Iterations) override;
@@ -172,7 +182,13 @@ private:
 	// Vault
 private:
 	bool TryMantle();
-	
+	FVector GetMantleStartLocation(FHitResult FrontHit, FHitResult SurfaceHit, bool bTallMantle) const;
+
+	// Helpers
+private:
+	bool IsServer() const;
+	float CapR() const;
+	float CapHH() const;
 	
 	// Interface
 public:
@@ -185,6 +201,7 @@ public:
 	UFUNCTION(BlueprintCallable) void DashPressed();
 	UFUNCTION(BlueprintCallable) void DashReleased();
 
+
 	UFUNCTION(BlueprintPure) bool IsCustomMovementMode(ECustomMovementMode InCustomMovementMode) const;
 	UFUNCTION(BlueprintPure) bool IsMovementMode(EMovementMode InMovementMode) const;
 
@@ -192,5 +209,7 @@ public:
 public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 private:
-	UFUNCTION() void OnRep_DashStart();
+	UFUNCTION() void OnRep_Dash();
+	UFUNCTION() void OnRep_ShortMantle();
+	UFUNCTION() void OnRep_TallMantle();
 };

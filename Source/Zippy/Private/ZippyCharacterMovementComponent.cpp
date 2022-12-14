@@ -7,11 +7,11 @@
 
 // Helper Macros
 #if 0
-#define MACRO_DIR 0.f;
-#define SLOG(x) GEngine->AddOnScreenDebugMessage(-1, MACRO_DIR ? -1 : MACRO_DIR, FColor::Yellow, x);
+float MacroDuration = 2.f;
+#define SLOG(x) GEngine->AddOnScreenDebugMessage(-1, MacroDuration ? MacroDuration : -1.f, FColor::Yellow, x);
 #define POINT(x, c) DrawDebugPoint(GetWorld(), x, 10, c, !MacroDuration, MacroDuration);
 #define LINE(x1, x2, c) DrawDebugLine(GetWorld(), x1, x2, c, !MacroDuration, MacroDuration);
-#define CAPSULE(x, c) DrawDebugCapsule(GetWorld(), x, CapHH, CapR, FQuat::Identity, c, !MacroDuration, MacroDuration);
+#define CAPSULE(x, c) DrawDebugCapsule(GetWorld(), x, CapHH(), CapR(), FQuat::Identity, c, !MacroDuration, MacroDuration);
 #else
 #define SLOG(x)
 #define POINT(x, c)
@@ -55,7 +55,8 @@ void UZippyCharacterMovementComponent::FSavedMove_Zippy::Clear()
 	Saved_bWantsToDash = 0;
 	Saved_bPressedZippyJump = 0;
 
-	Saved_bWasRootMotion = 0;
+	Saved_bHadAnimRootMotion = 0;
+	Saved_bTransitionFinished = 0;
 	
 	Saved_bWantsToProne = 0;
 	Saved_bPrevWantsToCrouch = 0;
@@ -82,8 +83,9 @@ void UZippyCharacterMovementComponent::FSavedMove_Zippy::SetMoveFor(ACharacter* 
 	Saved_bPrevWantsToCrouch = CharacterMovement->Safe_bPrevWantsToCrouch;
 	Saved_bPressedZippyJump = CharacterMovement->ZippyCharacterOwner->bPressedZippyJump;
 
-	Saved_bWasRootMotion = CharacterMovement->Safe_bWasRootMotion;
-	
+	Saved_bHadAnimRootMotion = CharacterMovement->Safe_bHadAnimRootMotion;
+	Saved_bTransitionFinished = CharacterMovement->Safe_bTransitionFinished;
+
 	Saved_bWantsToProne = CharacterMovement->Safe_bWantsToProne;
 	Saved_bWantsToDash = CharacterMovement->Safe_bWantsToDash;
 }
@@ -98,8 +100,9 @@ void UZippyCharacterMovementComponent::FSavedMove_Zippy::PrepMoveFor(ACharacter*
 	CharacterMovement->Safe_bPrevWantsToCrouch = Saved_bPrevWantsToCrouch;
 	CharacterMovement->ZippyCharacterOwner->bPressedZippyJump = Saved_bPressedZippyJump;
 
-	CharacterMovement->Safe_bWasRootMotion = Saved_bWasRootMotion;
-	
+	CharacterMovement->Safe_bHadAnimRootMotion = Saved_bHadAnimRootMotion;
+	CharacterMovement->Safe_bTransitionFinished = Saved_bTransitionFinished;
+
 	CharacterMovement->Safe_bWantsToProne = Saved_bWantsToProne;
 	CharacterMovement->Safe_bWantsToDash = Saved_bWantsToDash;
 }
@@ -236,7 +239,7 @@ void UZippyCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float 
 		{
 			PerformDash();
 			Safe_bWantsToDash = false;
-			Proxy_bDashStart = !Proxy_bDashStart;
+			Proxy_bDash = !Proxy_bDash;
 		}
 		else
 		{
@@ -244,6 +247,7 @@ void UZippyCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float 
 		}
 	}
 
+	// Try Mantle
 	if (ZippyCharacterOwner->bPressedZippyJump)
 	{
 		if (TryMantle())
@@ -259,8 +263,54 @@ void UZippyCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float 
 		}
 	}
 	
+	// Transition Mantle
+	if (Safe_bTransitionFinished)
+	{
+		SLOG("Transition Finished")
+		UE_LOG(LogTemp, Warning, TEXT("FINISHED RM"))
+
+		if (IsValid(TransitionQueuedMontage))
+		{
+			SetMovementMode(MOVE_Flying);
+			CharacterOwner->PlayAnimMontage(TransitionQueuedMontage, TransitionQueuedMontageSpeed);
+			TransitionQueuedMontageSpeed = 0.f;
+			TransitionQueuedMontage = nullptr;
+		}
+		else
+		{
+			SetMovementMode(MOVE_Walking);
+		}
+
+		Safe_bTransitionFinished = false;
+	}
+
+
 	Super::UpdateCharacterStateBeforeMovement(DeltaSeconds);
 }
+
+void UZippyCharacterMovementComponent::UpdateCharacterStateAfterMovement(float DeltaSeconds)
+{
+	Super::UpdateCharacterStateAfterMovement(DeltaSeconds);
+
+	if (!HasAnimRootMotion() && Safe_bHadAnimRootMotion && IsMovementMode(MOVE_Flying))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Ending Anim Root Motion"))
+		SetMovementMode(MOVE_Walking);
+	}
+
+	if (GetRootMotionSourceByID(TransitionRMS_ID) && GetRootMotionSourceByID(TransitionRMS_ID)->Status.HasFlag(ERootMotionSourceStatusFlags::Finished))
+	{
+		RemoveRootMotionSourceByID(TransitionRMS_ID);
+		Safe_bTransitionFinished = true;
+	}
+	
+			
+
+
+	
+	Safe_bHadAnimRootMotion = HasAnimRootMotion();
+}
+
 void UZippyCharacterMovementComponent::PhysCustom(float deltaTime, int32 Iterations)
 {
 	Super::PhysCustom(deltaTime, Iterations);
@@ -280,26 +330,7 @@ void UZippyCharacterMovementComponent::PhysCustom(float deltaTime, int32 Iterati
 void UZippyCharacterMovementComponent::OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity)
 {
 	Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
-
-	if (IsMovementMode(MOVE_Flying) && !HasRootMotionSources() && Safe_bWasRootMotion)
-	{
-		SetMovementMode(MOVE_Walking);
-	}
-
-	if (GetRootMotionSourceByID(TransitionRMS_ID) && GetRootMotionSourceByID(TransitionRMS_ID)->Status.HasFlag(ERootMotionSourceStatusFlags::Finished))
-	{
-		RemoveRootMotionSourceByID(TransitionRMS_ID);
-
-		if (IsValid(TransitionQueuedMontage))
-		{
-			SetMovementMode(MOVE_Flying);
-			CharacterOwner->PlayAnimMontage(TransitionQueuedMontage, TransitionQueuedMontageSpeed);
-			TransitionQueuedMontageSpeed = 0.f;
-			TransitionQueuedMontage = nullptr;
-		}
-	}
-
-	Safe_bWasRootMotion = HasRootMotionSources();
+	
 	Safe_bPrevWantsToCrouch = bWantsToCrouch;
 }
 
@@ -790,33 +821,35 @@ void UZippyCharacterMovementComponent::PerformDash()
 	DashStartDelegate.Broadcast();
 }
 
+#pragma endregion
+
+#pragma region Mantle
+
 bool UZippyCharacterMovementComponent::TryMantle()
 {
 	if (!(IsMovementMode(MOVE_Walking) && !IsCrouching()) && !IsMovementMode(MOVE_Falling)) return false;
 
 	// Helper Variables
-	float CapHH = CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-	float CapR = CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleRadius();
-	FVector BaseLoc = UpdatedComponent->GetComponentLocation() + FVector::DownVector * CapHH;
+	FVector BaseLoc = UpdatedComponent->GetComponentLocation() + FVector::DownVector * CapHH();
 	FVector Fwd = UpdatedComponent->GetForwardVector().GetSafeNormal2D();
 	auto Params = ZippyCharacterOwner->GetIgnoreCharacterParams();
-	float MaxHeight = CapHH * 2+ MantleReachHeight;
+	float MaxHeight = CapHH() * 2+ MantleReachHeight;
 	float CosMMWSA = FMath::Cos(FMath::DegreesToRadians(MantleMinWallSteepnessAngle));
 	float CosMMSA = FMath::Cos(FMath::DegreesToRadians(MantleMaxSurfaceAngle));
 	float CosMMAA = FMath::Cos(FMath::DegreesToRadians(MantleMaxAlignmentAngle));
 
 	
-SLOG(FString("Starting Mantle Attempt"))
+SLOG("Starting Mantle Attempt")
 
 	// Check Front Face
 	FHitResult FrontHit;
-	float CheckDistance = FMath::Clamp(Velocity | Fwd, CapR + 30, MantleMaxDistance);
+	float CheckDistance = FMath::Clamp(Velocity | Fwd, CapR() + 30, MantleMaxDistance);
 	FVector FrontStart = BaseLoc + FVector::UpVector * (MaxStepHeight - 1);
 	for (int i = 0; i < 6; i++)
 	{
 		LINE(FrontStart, FrontStart + Fwd * CheckDistance, FColor::Red)
 		if (GetWorld()->LineTraceSingleByProfile(FrontHit, FrontStart, FrontStart + Fwd * CheckDistance, "BlockAll", Params)) break;
-		FrontStart += FVector::UpVector * (2.f * CapHH - (MaxStepHeight - 1)) / 5;
+		FrontStart += FVector::UpVector * (2.f * CapHH() - (MaxStepHeight - 1)) / 5;
 	}
 	if (!FrontHit.IsValidBlockingHit()) return false;
 	float CosWallSteepnessAngle = FrontHit.Normal | FVector::UpVector;
@@ -853,40 +886,47 @@ POINT(SurfaceHit.Location, FColor::Blue);
 	// Check Clearance
 	float SurfaceCos = FVector::UpVector | SurfaceHit.Normal;
 	float SurfaceSin = FMath::Sqrt(1 - SurfaceCos * SurfaceCos);
-	FVector ClearCapLoc = SurfaceHit.Location + Fwd * CapR + FVector::UpVector * (CapHH + 1 + CapR * 2 * SurfaceSin);
-	FCollisionShape CapShape = FCollisionShape::MakeCapsule(CapR, CapHH);
+	FVector ClearCapLoc = SurfaceHit.Location + Fwd * CapR() + FVector::UpVector * (CapHH() + 1 + CapR() * 2 * SurfaceSin);
+	FCollisionShape CapShape = FCollisionShape::MakeCapsule(CapR(), CapHH());
 	if (GetWorld()->OverlapAnyTestByProfile(ClearCapLoc, FQuat::Identity, "BlockAll", CapShape, Params))
 	{
-		CAPSULE(ClearCapLoc, FColor::Red)
+CAPSULE(ClearCapLoc, FColor::Red)
 		return false;
 	}
 	else
 	{
-		CAPSULE(ClearCapLoc, FColor::Green)
+CAPSULE(ClearCapLoc, FColor::Green)
 	}
 	SLOG("Can Mantle")
 	
-	// Perform Transition to Mantle
-	bool bTallMantle = Height > CapHH * 2;
-	float DownDistance = bTallMantle ? CapHH * 2.f : MaxStepHeight - 1;
-
-	FVector EdgeTangent = FVector::CrossProduct(SurfaceHit.Normal, FrontHit.Normal).GetSafeNormal();
-	FVector TransitionTarget = SurfaceHit.Location + FrontHit.Normal.GetSafeNormal2D() * (2.f + CapR);
-	TransitionTarget += Fwd.ProjectOnTo(EdgeTangent) * CapR * .3f;
-	TransitionTarget += FVector::UpVector * CapHH;
-	TransitionTarget += FVector::DownVector * DownDistance;
-	TransitionTarget += FrontHit.Normal.GetSafeNormal2D() * CosWallSteepnessAngle * DownDistance;
+	// Mantle Selection
+	FVector ShortMantleTarget = GetMantleStartLocation(FrontHit, SurfaceHit, false);
+	FVector TallMantleTarget = GetMantleStartLocation(FrontHit, SurfaceHit, true);
+	
+	bool bTallMantle = false;
+	if (IsMovementMode(MOVE_Walking) && Height > CapHH() * 2)
+		bTallMantle = true;
+	else if (IsMovementMode(MOVE_Falling) && (Velocity | FVector::UpVector) < 0)
+	{
+		if (!GetWorld()->OverlapAnyTestByProfile(TallMantleTarget, FQuat::Identity, "BlockAll", CapShape, Params))
+			bTallMantle = true;
+	}
+	FVector TransitionTarget = bTallMantle ? TallMantleTarget : ShortMantleTarget;
 CAPSULE(TransitionTarget, FColor::Yellow)
-	CAPSULE(UpdatedComponent->GetComponentLocation(), FColor::Red)
+
+	// Perform Transition to Mantle
+CAPSULE(UpdatedComponent->GetComponentLocation(), FColor::Red)
 
 	float UpSpeed = Velocity | FVector::UpVector;
 	float TransDistance = FVector::Dist(TransitionTarget, UpdatedComponent->GetComponentLocation());
-	
-	TransitionQueuedMontageSpeed = FMath::GetMappedRangeValueClamped(FVector2D(-1000, 600), FVector2D(.7f, 1.2f), UpSpeed);
+
+	TransitionQueuedMontageSpeed = FMath::GetMappedRangeValueClamped(FVector2D(-500, 750), FVector2D(.9f, 1.2f), UpSpeed);
 	TransitionRMS.Reset();
 	TransitionRMS = MakeShared<FRootMotionSource_MoveToForce>();
 	TransitionRMS->AccumulateMode = ERootMotionAccumulateMode::Override;
+	
 	TransitionRMS->Duration = FMath::Clamp(TransDistance / 500.f, .1f, .25f);
+SLOG(FString::Printf(TEXT("Duration: %f"), TransitionRMS->Duration))
 	TransitionRMS->StartLocation = UpdatedComponent->GetComponentLocation();
 	TransitionRMS->TargetLocation = TransitionTarget;
 
@@ -900,15 +940,51 @@ CAPSULE(TransitionTarget, FColor::Yellow)
 	{
 		TransitionQueuedMontage = TallMantleMontage;
 		CharacterOwner->PlayAnimMontage(TransitionTallMantleMontage, 1 / TransitionRMS->Duration);
+		if (IsServer()) Proxy_bTallMantle = !Proxy_bTallMantle;
 	}
 	else
 	{
 		TransitionQueuedMontage = ShortMantleMontage;
-		TransitionRMS_ID = ApplyRootMotionSource(TransitionRMS);
 		CharacterOwner->PlayAnimMontage(TransitionShortMantleMontage, 1 / TransitionRMS->Duration);
+		if (IsServer()) Proxy_bShortMantle = !Proxy_bShortMantle;
 	}
 
 	return true;
+}
+
+FVector UZippyCharacterMovementComponent::GetMantleStartLocation(FHitResult FrontHit, FHitResult SurfaceHit, bool bTallMantle) const
+{
+	float CosWallSteepnessAngle = FrontHit.Normal | FVector::UpVector;
+	float DownDistance = bTallMantle ? CapHH() * 2.f : MaxStepHeight - 1;
+	FVector EdgeTangent = FVector::CrossProduct(SurfaceHit.Normal, FrontHit.Normal).GetSafeNormal();
+
+	FVector MantleStart = SurfaceHit.Location;
+	MantleStart += FrontHit.Normal.GetSafeNormal2D() * (2.f + CapR());
+	MantleStart += UpdatedComponent->GetForwardVector().GetSafeNormal2D().ProjectOnTo(EdgeTangent) * CapR() * .3f;
+	MantleStart += FVector::UpVector * CapHH();
+	MantleStart += FVector::DownVector * DownDistance;
+	MantleStart += FrontHit.Normal.GetSafeNormal2D() * CosWallSteepnessAngle * DownDistance;
+
+	return MantleStart;
+}
+
+#pragma endregion
+
+#pragma region Helpers
+
+bool UZippyCharacterMovementComponent::IsServer() const
+{
+	return CharacterOwner->HasAuthority();
+}
+
+float UZippyCharacterMovementComponent::CapR() const
+{
+	return CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleRadius();
+}
+
+float UZippyCharacterMovementComponent::CapHH() const
+{
+	return CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
 }
 
 #pragma endregion
@@ -969,155 +1045,26 @@ void UZippyCharacterMovementComponent::GetLifetimeReplicatedProps(TArray<FLifeti
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME_CONDITION(UZippyCharacterMovementComponent, Proxy_bDashStart, COND_SkipOwner)
+	DOREPLIFETIME_CONDITION(UZippyCharacterMovementComponent, Proxy_bDash, COND_SkipOwner)
+	
+	DOREPLIFETIME_CONDITION(UZippyCharacterMovementComponent, Proxy_bShortMantle, COND_SkipOwner)
+	DOREPLIFETIME_CONDITION(UZippyCharacterMovementComponent, Proxy_bTallMantle, COND_SkipOwner)
 }
 
-void UZippyCharacterMovementComponent::OnRep_DashStart()
+void UZippyCharacterMovementComponent::OnRep_Dash()
 {
 	CharacterOwner->PlayAnimMontage(DashMontage);
     DashStartDelegate.Broadcast();
 }
 
-#pragma endregion
-
-
-/*
-bool UZippyCharacterMovementComponent::TryMantle()
+void UZippyCharacterMovementComponent::OnRep_ShortMantle()
 {
-	if (!(IsMovementMode(MOVE_Walking) && !IsCrouching()) && !IsMovementMode(MOVE_Falling)) return false;
-
-	// Helper Variables
-	float CapHH = CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-	float CapR = CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleRadius();
-	FVector BaseLoc = UpdatedComponent->GetComponentLocation() + FVector::DownVector * CapHH;
-	FVector Fwd = UpdatedComponent->GetForwardVector().GetSafeNormal2D();
-	auto Params = ZippyCharacterOwner->GetIgnoreCharacterParams();
-	float MaxHeight = CapHH * 2+ MantleReachHeight;
-	float CosMMWSA = FMath::Cos(FMath::DegreesToRadians(MantleMinWallSteepnessAngle));
-	float CosMMSA = FMath::Cos(FMath::DegreesToRadians(MantleMaxSurfaceAngle));
-	float CosMMAA = FMath::Cos(FMath::DegreesToRadians(MantleMaxAlignmentAngle));
-
-#define QLOG(x) GEngine->AddOnScreenDebugMessage(-1, 30, FColor::Yellow, x);
-#define POINT(x, c) DrawDebugPoint(GetWorld(), x, 5, c, true);
-
-	// Check Front Face
-	FHitResult FrontHit;
-	FVector FrontStart = BaseLoc + FVector::UpVector * (MaxStepHeight - 1);
-	for (int i = 0; i < 6; i++)
-	{
-		if (GetWorld()->LineTraceSingleByProfile(FrontHit, FrontStart, FrontStart + Fwd * MaxMantleDistance, "BlockAll", Params)) break;
-		DrawDebugLine(GetWorld(), FrontStart, FrontStart + Fwd * MaxMantleDistance, FColor::Red, false, 2.f);
-		FrontStart += FVector::UpVector * (2.f * CapHH - (MaxStepHeight - 1)) / 5;
-	}
-	if (!FrontHit.IsValidBlockingHit()) return false;
-	float CosWallSteepnessAngle = FrontHit.Normal | FVector::UpVector;
-	if (FMath::Abs(CosWallSteepnessAngle) > CosMMWSA || (Fwd | -FrontHit.Normal) < CosMMAA) return false;
-
-	POINT(FrontHit.Location, FColor::Red);
-	
-	// Check Height
-	TArray<FHitResult> HeightHits;
-	FHitResult SurfaceHit;
-	FVector WallUp = FVector::VectorPlaneProject(FVector::UpVector, FrontHit.Normal).GetSafeNormal();
-	float WallCos = FVector::UpVector | FrontHit.Normal;
-	float WallSin = FMath::Sqrt(1 - WallCos * WallCos);
-	FVector TraceStart = FrontHit.Location + Fwd + WallUp * (MaxHeight - (MaxStepHeight - 1)) / WallSin;
-	DrawDebugLine(GetWorld(), TraceStart, FrontHit.Location + Fwd, FColor::Orange, true);
-	if (!GetWorld()->LineTraceMultiByProfile(HeightHits, TraceStart, FrontHit.Location + Fwd, "BlockAll", Params)) return false;
-	for (const FHitResult& Hit : HeightHits)
-	{
-		if (Hit.IsValidBlockingHit())
-		{
-			SurfaceHit = Hit;
-			break;
-		}
-	}
-	if (!SurfaceHit.IsValidBlockingHit() || (SurfaceHit.Normal | FVector::UpVector) < CosMMSA) return false;
-	float Height = (SurfaceHit.Location - BaseLoc) | FVector::UpVector;
-	if (Height > MaxHeight) return false;
-
-	QLOG(FString::Printf(TEXT("Height: %f"), Height))
-	POINT(SurfaceHit.Location, FColor::Blue);
-
-	// Check Clearance
-	float SurfaceCos = FVector::UpVector | SurfaceHit.Normal;
-	float SurfaceSin = FMath::Sqrt(1 - SurfaceCos * SurfaceCos);
-	FVector ClearCapLoc = SurfaceHit.Location + Fwd * CapR + FVector::UpVector * (CapHH + 1 + CapR * 2 * SurfaceSin);
-	FCollisionShape CapShape = FCollisionShape::MakeCapsule(CapR, CapHH);
-	DrawDebugCapsule(GetWorld(), ClearCapLoc, CapHH, CapR, FQuat::Identity, FColor::Red, false, 5.f);
-	if (GetWorld()->OverlapAnyTestByProfile(ClearCapLoc, FQuat::Identity, "BlockAll", CapShape, Params)) return false;
-	
-	// Check Depth
-	FVector SurfaceTangent = FVector::VectorPlaneProject(-FrontHit.Normal, SurfaceHit.Normal).GetSafeNormal();
-	FVector DepthStart = SurfaceHit.Location + FVector::DownVector + SurfaceTangent * MaxVaultDepth / SurfaceCos;
-	FHitResult DepthHit;
-	DrawDebugLine(GetWorld(), DepthStart, SurfaceHit.Location + FVector::DownVector, FColor::Blue, true);
-	GetWorld()->LineTraceSingleByProfile(DepthHit, DepthStart, SurfaceHit.Location + FVector::DownVector, "BlockAll", Params);
-	float Depth = DepthHit.IsValidBlockingHit() ? FVector::Dist2D(DepthHit.Location, SurfaceHit.Location) + 1 : MaxVaultDepth + 1;
-
-	QLOG(FString::Printf(TEXT("Depth: %f"), Depth))
-	
-	FVector EdgeTangent = FVector::CrossProduct(SurfaceHit.Normal, FrontHit.Normal).GetSafeNormal();
-	FVector TargetBaseLoc = SurfaceHit.Location + FrontHit.Normal.GetSafeNormal2D() * (2.f + CapR) + Fwd.ProjectOnTo(EdgeTangent) * CapR;
-
-	if (Height > CapHH * 2) // Tall Mantle
-	{
-		if (Depth < MinMantleDepth) return false;
-		UE_LOG(LogTemp, Warning, TEXT("Tall Mantle"))
-
-		TargetBaseLoc += FVector::DownVector * CapHH * 2.f;
-		TargetBaseLoc += FrontHit.Normal.GetSafeNormal2D() * CosWallSteepnessAngle * CapHH * 2;
-
-		DrawDebugCapsule(GetWorld(), TargetBaseLoc + FVector::UpVector * CapHH, CapHH, CapR, FQuat::Identity, FColor::Green, false, 5.f);
-
-		
-		TransitionRMS = MakeShared<FRootMotionSource_MoveToForce>();
-		TransitionRMS->AccumulateMode = ERootMotionAccumulateMode::Additive;
-		TransitionRMS->Duration = FVector::Dist(TargetBaseLoc + FVector::UpVector * CapHH, UpdatedComponent->GetComponentLocation()) / 600.f;
-		TransitionRMS->TargetLocation = TargetBaseLoc + FVector::UpVector * CapHH;
-		TransitionRMS->StartLocation = UpdatedComponent->GetComponentLocation();
-
-		Velocity = FVector::ZeroVector;
-
-		TransitionQueuedMontage = TallMantleMontage;
-
-		TransitionRMS_ID = ApplyRootMotionSource(TransitionRMS);
-
-		CharacterOwner->PlayAnimMontage(TransitionTallMantleMontage, 1 / TransitionRMS->Duration);
-	}
-	else
-	{
-		TargetBaseLoc += FVector::DownVector * (MaxStepHeight - 1);
-		TargetBaseLoc += FrontHit.Normal.GetSafeNormal2D() * CosWallSteepnessAngle * (MaxStepHeight - 1);
-
-		DrawDebugCapsule(GetWorld(), TargetBaseLoc + FVector::UpVector * CapHH, CapHH, CapR, FQuat::Identity, FColor::Green, false, 5.f);
-
-
-		if (Depth > MaxVaultDepth || Velocity.SizeSquared() < pow(100, 2)) // Short Mantle
-		{
-			if (Depth < MinMantleDepth) return false;
-			UE_LOG(LogTemp, Warning, TEXT("Short Mantle"))
-
-			TransitionRMS = MakeShared<FRootMotionSource_MoveToForce>();
-			TransitionRMS->AccumulateMode = ERootMotionAccumulateMode::Additive;
-			TransitionRMS->Duration = FVector::Dist(TargetBaseLoc + FVector::UpVector * CapHH, UpdatedComponent->GetComponentLocation()) / 600.f;
-			TransitionRMS->TargetLocation = TargetBaseLoc + FVector::UpVector * CapHH;
-			TransitionRMS->StartLocation = UpdatedComponent->GetComponentLocation();
-
-			Velocity = FVector::ZeroVector;
-
-			TransitionQueuedMontage = ShortMantleMontage;
-
-			TransitionRMS_ID = ApplyRootMotionSource(TransitionRMS);
-
-			CharacterOwner->PlayAnimMontage(TransitionShortMantleMontage, 1 / TransitionRMS->Duration);
-		}
-		else // Vault
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Vault"))
-		}
-	}
-	
-	return true;
+	CharacterOwner->PlayAnimMontage(ProxyShortMantleMontage);
 }
-*/
+
+void UZippyCharacterMovementComponent::OnRep_TallMantle()
+{
+	CharacterOwner->PlayAnimMontage(ProxyTallMantleMontage);
+}
+
+#pragma endregion
