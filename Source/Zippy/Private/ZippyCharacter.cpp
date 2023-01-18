@@ -130,5 +130,4 @@ FCollisionQueryParams AZippyCharacter::GetIgnoreCharacterParams() const
 	Params.AddIgnoredActor(this);
 
 	return Params;
-
 }

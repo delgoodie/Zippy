@@ -13,6 +13,7 @@ enum ECustomMovementMode
 	CMOVE_None			UMETA(Hidden),
 	CMOVE_Slide			UMETA(DisplayName = "Slide"),
 	CMOVE_Prone			UMETA(DisplayName = "Prone"),
+	CMOVE_WallRun		UMETA(DisplayName = "Wall Run"),
 	CMOVE_MAX			UMETA(Hidden),
 };
 
@@ -43,6 +44,8 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		uint8 Saved_bTransitionFinished:1;
 		uint8 Saved_bPrevWantsToCrouch:1;
 		uint8 Saved_bWantsToProne:1;
+		uint8 Saved_bWallRunIsRight:1;
+
 
 		FSavedMove_Zippy();
 
@@ -98,6 +101,17 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		UPROPERTY(EditDefaultsOnly) UAnimMontage* ShortMantleMontage;
 		UPROPERTY(EditDefaultsOnly) UAnimMontage* TransitionShortMantleMontage;
 		UPROPERTY(EditDefaultsOnly) UAnimMontage* ProxyShortMantleMontage;
+
+
+		// Wall Run
+		UPROPERTY(EditDefaultsOnly) float MinWallRunSpeed=200.f;
+		UPROPERTY(EditDefaultsOnly) float MaxWallRunSpeed=800.f;
+		UPROPERTY(EditDefaultsOnly) float MaxVerticalWallRunSpeed=200.f;
+		UPROPERTY(EditDefaultsOnly) float WallRunPullAwayAngle=75;
+		UPROPERTY(EditDefaultsOnly) float WallAttractionForce = 200.f;
+		UPROPERTY(EditDefaultsOnly) float MinWallRunHeight=50.f;
+		UPROPERTY(EditDefaultsOnly) UCurveFloat* WallRunGravityScaleCurve;
+		UPROPERTY(EditDefaultsOnly) float WallJumpOffForce = 300.f;
 	
 	// Transient
 		UPROPERTY(Transient) AZippyCharacter* ZippyCharacterOwner;
@@ -119,7 +133,8 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		UPROPERTY(Transient) UAnimMontage* TransitionQueuedMontage;
 		float TransitionQueuedMontageSpeed;
 		int TransitionRMS_ID;
-	
+
+		bool Safe_bWallRunIsRight;
 
 	// Replication
 		UPROPERTY(ReplicatedUsing=OnRep_Dash) bool Proxy_bDash;
@@ -144,6 +159,9 @@ public:
 	virtual bool CanCrouchInCurrentState() const override;
 	virtual float GetMaxSpeed() const override;
 	virtual float GetMaxBrakingDeceleration() const override;
+
+	virtual bool CanAttemptJump() const override;
+	virtual bool DoJump(bool bReplayingMoves) override;
 	
 protected:
 	virtual void UpdateFromCompressedFlags(uint8 Flags) override;
@@ -184,6 +202,12 @@ private:
 	bool TryMantle();
 	FVector GetMantleStartLocation(FHitResult FrontHit, FHitResult SurfaceHit, bool bTallMantle) const;
 
+	// Wall Run
+private:
+	bool TryWallRun();
+	void PhysWallRun(float deltaTime, int32 Iterations);
+
+	
 	// Helpers
 private:
 	bool IsServer() const;
@@ -204,6 +228,9 @@ public:
 
 	UFUNCTION(BlueprintPure) bool IsCustomMovementMode(ECustomMovementMode InCustomMovementMode) const;
 	UFUNCTION(BlueprintPure) bool IsMovementMode(EMovementMode InMovementMode) const;
+
+	UFUNCTION(BlueprintPure) bool IsWallRunning() const { return IsCustomMovementMode(CMOVE_WallRun); }
+	UFUNCTION(BlueprintPure) bool WallRunningIsRight() const { return Safe_bWallRunIsRight; }
 
 	// Proxy Replication
 public:
