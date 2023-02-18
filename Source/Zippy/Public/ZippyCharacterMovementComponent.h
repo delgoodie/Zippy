@@ -15,6 +15,7 @@ enum ECustomMovementMode
 	CMOVE_Prone			UMETA(DisplayName = "Prone"),
 	CMOVE_WallRun		UMETA(DisplayName = "Wall Run"),
 	CMOVE_Hang			UMETA(DisplayName = "Hang"),
+	CMOVE_Climb			UMETA(DisplayName = "Climb"),
 	CMOVE_MAX			UMETA(Hidden),
 };
 
@@ -104,20 +105,25 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		UPROPERTY(EditDefaultsOnly) UAnimMontage* ProxyShortMantleMontage;
 
 
-		// Wall Run
-		UPROPERTY(EditDefaultsOnly) float MinWallRunSpeed=200.f;
-		UPROPERTY(EditDefaultsOnly) float MaxWallRunSpeed=800.f;
-		UPROPERTY(EditDefaultsOnly) float MaxVerticalWallRunSpeed=200.f;
-		UPROPERTY(EditDefaultsOnly) float WallRunPullAwayAngle=75;
-		UPROPERTY(EditDefaultsOnly) float WallAttractionForce = 200.f;
-		UPROPERTY(EditDefaultsOnly) float MinWallRunHeight=50.f;
-		UPROPERTY(EditDefaultsOnly) UCurveFloat* WallRunGravityScaleCurve;
-		UPROPERTY(EditDefaultsOnly) float WallJumpOffForce = 300.f;
+	// Wall Run
+	UPROPERTY(EditDefaultsOnly) float MinWallRunSpeed=200.f;
+	UPROPERTY(EditDefaultsOnly) float MaxWallRunSpeed=800.f;
+	UPROPERTY(EditDefaultsOnly) float MaxVerticalWallRunSpeed=200.f;
+	UPROPERTY(EditDefaultsOnly) float WallRunPullAwayAngle=75;
+	UPROPERTY(EditDefaultsOnly) float WallAttractionForce = 200.f;
+	UPROPERTY(EditDefaultsOnly) float MinWallRunHeight=50.f;
+	UPROPERTY(EditDefaultsOnly) UCurveFloat* WallRunGravityScaleCurve;
+	UPROPERTY(EditDefaultsOnly) float WallJumpOffForce = 300.f;
+
+	// Hang
+	UPROPERTY(EditDefaultsOnly) UAnimMontage* TransitionHangMontage;
+	UPROPERTY(EditDefaultsOnly) UAnimMontage* WallJumpMontage;
+	UPROPERTY(EditDefaultsOnly) float WallJumpForce = 400.f;
 
 	// Climb
-	UPROPERTY(EditDefaultsOnly) UAnimMontage* TransitionHangMontage;
-	UPROPERTY(EditDefaultsOnly) UAnimMontage* HangJumpMontage;
-	UPROPERTY(EditDefaultsOnly) float HangJumpForce = 400.f;
+	UPROPERTY(EditDefaultsOnly) float MaxClimbSpeed = 300.f;
+	UPROPERTY(EditDefaultsOnly) float BrakingDecelerationClimbing = 1000.f;
+	UPROPERTY(EditDefaultsOnly) float ClimbReachDistance = 200.f;
 
 	
 	// Transient
@@ -218,6 +224,9 @@ private:
 // Climb
 private:
 	bool TryHang();
+
+	bool TryClimb();
+	void PhysClimb(float deltaTime, int32 Iterations);
 	
 	// Helpers
 private:
@@ -235,14 +244,17 @@ public:
 	
 	UFUNCTION(BlueprintCallable) void DashPressed();
 	UFUNCTION(BlueprintCallable) void DashReleased();
-
+	
+	UFUNCTION(BlueprintCallable) void ClimbPressed();
+	UFUNCTION(BlueprintCallable) void ClimbReleased();
 
 	UFUNCTION(BlueprintPure) bool IsCustomMovementMode(ECustomMovementMode InCustomMovementMode) const;
 	UFUNCTION(BlueprintPure) bool IsMovementMode(EMovementMode InMovementMode) const;
 
 	UFUNCTION(BlueprintPure) bool IsWallRunning() const { return IsCustomMovementMode(CMOVE_WallRun); }
-	UFUNCTION(BlueprintPure) bool IsHanging() const { return IsCustomMovementMode(CMOVE_Hang); }
 	UFUNCTION(BlueprintPure) bool WallRunningIsRight() const { return Safe_bWallRunIsRight; }
+	UFUNCTION(BlueprintPure) bool IsHanging() const { return IsCustomMovementMode(CMOVE_Hang); }
+	UFUNCTION(BlueprintPure) bool IsClimbing() const { return IsCustomMovementMode(CMOVE_Climb); }
 
 	// Proxy Replication
 public:
