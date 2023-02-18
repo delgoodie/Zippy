@@ -14,6 +14,7 @@ enum ECustomMovementMode
 	CMOVE_Slide			UMETA(DisplayName = "Slide"),
 	CMOVE_Prone			UMETA(DisplayName = "Prone"),
 	CMOVE_WallRun		UMETA(DisplayName = "Wall Run"),
+	CMOVE_Hang			UMETA(DisplayName = "Hang"),
 	CMOVE_MAX			UMETA(Hidden),
 };
 
@@ -112,6 +113,12 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 		UPROPERTY(EditDefaultsOnly) float MinWallRunHeight=50.f;
 		UPROPERTY(EditDefaultsOnly) UCurveFloat* WallRunGravityScaleCurve;
 		UPROPERTY(EditDefaultsOnly) float WallJumpOffForce = 300.f;
+
+	// Climb
+	UPROPERTY(EditDefaultsOnly) UAnimMontage* TransitionHangMontage;
+	UPROPERTY(EditDefaultsOnly) UAnimMontage* HangJumpMontage;
+	UPROPERTY(EditDefaultsOnly) float HangJumpForce = 400.f;
+
 	
 	// Transient
 		UPROPERTY(Transient) AZippyCharacter* ZippyCharacterOwner;
@@ -130,6 +137,7 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 
 		bool Safe_bTransitionFinished;
 		TSharedPtr<FRootMotionSource_MoveToForce> TransitionRMS;
+		FString TransitionName;
 		UPROPERTY(Transient) UAnimMontage* TransitionQueuedMontage;
 		float TransitionQueuedMontageSpeed;
 		int TransitionRMS_ID;
@@ -207,6 +215,9 @@ private:
 	bool TryWallRun();
 	void PhysWallRun(float deltaTime, int32 Iterations);
 
+// Climb
+private:
+	bool TryHang();
 	
 	// Helpers
 private:
@@ -230,6 +241,7 @@ public:
 	UFUNCTION(BlueprintPure) bool IsMovementMode(EMovementMode InMovementMode) const;
 
 	UFUNCTION(BlueprintPure) bool IsWallRunning() const { return IsCustomMovementMode(CMOVE_WallRun); }
+	UFUNCTION(BlueprintPure) bool IsHanging() const { return IsCustomMovementMode(CMOVE_Hang); }
 	UFUNCTION(BlueprintPure) bool WallRunningIsRight() const { return Safe_bWallRunIsRight; }
 
 	// Proxy Replication

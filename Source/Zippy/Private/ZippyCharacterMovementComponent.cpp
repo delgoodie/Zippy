@@ -193,6 +193,8 @@ float UZippyCharacterMovementComponent::GetMaxSpeed() const
 		return MaxProneSpeed;
 	case CMOVE_WallRun:
 		return MaxWallRunSpeed;
+	case CMOVE_Hang:
+		return 0.f;
 	default:
 		UE_LOG(LogTemp, Fatal, TEXT("Invalid Movement Mode"))
 		return -1.f;
@@ -210,6 +212,8 @@ float UZippyCharacterMovementComponent::GetMaxBrakingDeceleration() const
 		return BrakingDecelerationProning;
 	case CMOVE_WallRun:
 		return 0.f;
+	case CMOVE_Hang:
+		return 0.f;
 	default:
 		UE_LOG(LogTemp, Fatal, TEXT("Invalid Movement Mode"))
 		return -1.f;
@@ -218,12 +222,13 @@ float UZippyCharacterMovementComponent::GetMaxBrakingDeceleration() const
 
 bool UZippyCharacterMovementComponent::CanAttemptJump() const
 {
-	return Super::CanAttemptJump() || IsWallRunning();
+	return Super::CanAttemptJump() || IsWallRunning() || IsHanging();
 }
 
 bool UZippyCharacterMovementComponent::DoJump(bool bReplayingMoves)
 {
 	bool bWasWallRunning = IsWallRunning();
+	bool bWasHanging = IsHanging();
 	if (Super::DoJump(bReplayingMoves))
 	{
 		if (bWasWallRunning)
@@ -236,7 +241,15 @@ bool UZippyCharacterMovementComponent::DoJump(bool bReplayingMoves)
 			GetWorld()->LineTraceSingleByProfile(WallHit, Start, End, "BlockAll", Params);
 			Velocity += WallHit.Normal * WallJumpOffForce;
 		}
-	
+		else if (bWasHanging)
+		{
+			if (!bReplayingMoves)
+			{
+				CharacterOwner->PlayAnimMontage(HangJumpMontage);
+				Velocity += FVector::UpVector * HangJumpForce * .5f;
+				Velocity += Acceleration.GetSafeNormal2D() * HangJumpForce * .5f;
+			}
+		}
 		return true;
 	}
 	return false;
@@ -294,8 +307,14 @@ void UZippyCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float 
 	// Try Mantle
 	if (ZippyCharacterOwner->bPressedZippyJump)
 	{
+		SLOG("Trying Zippyjump")
 		if (TryMantle())
 		{
+			ZippyCharacterOwner->StopJumping();		
+		}
+		else if (TryHang())
+		{
+
 			ZippyCharacterOwner->StopJumping();		
 		}
 		else
@@ -304,27 +323,39 @@ void UZippyCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float 
 			ZippyCharacterOwner->bPressedZippyJump = false;
 			CharacterOwner->bPressedJump = true;
 			CharacterOwner->CheckJumpInput(DeltaSeconds);
+			bOrientRotationToMovement = true;
+
 		}
+
 	}
 	
-	// Transition Mantle
+	// Transition
 	if (Safe_bTransitionFinished)
 	{
 		SLOG("Transition Finished")
 		UE_LOG(LogTemp, Warning, TEXT("FINISHED RM"))
 
-		if (IsValid(TransitionQueuedMontage))
+		if (TransitionName == "Mantle")
 		{
-			SetMovementMode(MOVE_Flying);
-			CharacterOwner->PlayAnimMontage(TransitionQueuedMontage, TransitionQueuedMontageSpeed);
-			TransitionQueuedMontageSpeed = 0.f;
-			TransitionQueuedMontage = nullptr;
+			if (IsValid(TransitionQueuedMontage))
+			{
+				SetMovementMode(MOVE_Flying);
+				CharacterOwner->PlayAnimMontage(TransitionQueuedMontage, TransitionQueuedMontageSpeed);
+				TransitionQueuedMontageSpeed = 0.f;
+				TransitionQueuedMontage = nullptr;
+			}
+			else
+			{
+				SetMovementMode(MOVE_Walking);
+			}
 		}
-		else
+		else if (TransitionName == "Hang")
 		{
-			SetMovementMode(MOVE_Walking);
+			SetMovementMode(MOVE_Custom, CMOVE_Hang);
+			Velocity = FVector::ZeroVector;
 		}
 
+		TransitionName = "";
 		Safe_bTransitionFinished = false;
 	}
 
@@ -354,9 +385,6 @@ void UZippyCharacterMovementComponent::UpdateCharacterStateAfterMovement(float D
 		RemoveRootMotionSourceByID(TransitionRMS_ID);
 		Safe_bTransitionFinished = true;
 	}
-	
-			
-
 
 	
 	Safe_bHadAnimRootMotion = HasAnimRootMotion();
@@ -376,6 +404,8 @@ void UZippyCharacterMovementComponent::PhysCustom(float deltaTime, int32 Iterati
 		break;
 	case CMOVE_WallRun:
 		PhysWallRun(deltaTime, Iterations);
+		break;
+	case CMOVE_Hang:
 		break;
 	default:
 		UE_LOG(LogTemp, Fatal, TEXT("Invalid Movement Mode"))
@@ -998,6 +1028,7 @@ SLOG(FString::Printf(TEXT("Duration: %f"), TransitionRMS->Duration))
 	Velocity = FVector::ZeroVector;
 	SetMovementMode(MOVE_Flying);
 	TransitionRMS_ID = ApplyRootMotionSource(TransitionRMS);
+	TransitionName = "Mantle";
 
 	// Animations
 	if (bTallMantle)
@@ -1171,8 +1202,90 @@ void UZippyCharacterMovementComponent::PhysWallRun(float deltaTime, int32 Iterat
 	{
 		SetMovementMode(MOVE_Falling);
 	}
-} 
+}
 
+bool UZippyCharacterMovementComponent::TryHang()
+{
+	if (!IsMovementMode(MOVE_Falling)) return false;
+
+	SLOG("Wants to climb")
+
+
+	FHitResult WallHit;
+	if (!GetWorld()->LineTraceSingleByProfile(WallHit, UpdatedComponent->GetComponentLocation(), UpdatedComponent->GetComponentLocation() + UpdatedComponent->GetForwardVector() * 300, "BlockAll", ZippyCharacterOwner->GetIgnoreCharacterParams()))
+		return false;
+
+	TArray<FOverlapResult> OverlapResults;
+
+
+	FVector ColLoc = UpdatedComponent->GetComponentLocation() + FVector::UpVector * CapHH() + UpdatedComponent->GetForwardVector() * CapR() * 3;
+	auto ColBox = FCollisionShape::MakeBox(FVector(100, 100, 50));
+	FQuat ColRot = FRotationMatrix::MakeFromXZ(WallHit.Normal, FVector::UpVector).ToQuat();
+
+	DrawDebugBox(GetWorld(), ColLoc, FVector(100, 100, 100), FColor::Red, true);
+	
+	if (!GetWorld()->OverlapMultiByChannel(OverlapResults, ColLoc, ColRot, ECC_WorldStatic, ColBox, ZippyCharacterOwner->GetIgnoreCharacterParams()))
+		return false;
+
+	AActor* ClimbPoint = nullptr;
+	
+	float MaxHeight = -1e20;
+	for (FOverlapResult Result : OverlapResults)
+	{
+		if (Result.GetActor()->ActorHasTag("Climb Point"))
+		{
+			float Height = Result.GetActor()->GetActorLocation().Z;
+			if (Height > MaxHeight)
+			{
+				MaxHeight = Height;
+				ClimbPoint = Result.GetActor();
+			}
+		}
+	}
+	if (!IsValid(ClimbPoint)) return false;
+
+	FVector TargetLocation = ClimbPoint->GetActorLocation() + WallHit.Normal * CapR() * 1.01f + FVector::DownVector * CapHH();
+	FQuat TargetRotation = FRotationMatrix::MakeFromXZ(-WallHit.Normal, FVector::UpVector).ToQuat();
+
+	
+	// Test if character can reach goal
+	FTransform CurrentTransform = UpdatedComponent->GetComponentTransform();
+	FHitResult Hit, ReturnHit;
+	SafeMoveUpdatedComponent(TargetLocation - UpdatedComponent->GetComponentLocation(), UpdatedComponent->GetComponentQuat(), true, Hit);
+	FVector ResultLocation = UpdatedComponent->GetComponentLocation();
+	SafeMoveUpdatedComponent(CurrentTransform.GetLocation() - ResultLocation, TargetRotation, false, ReturnHit);
+	if (!ResultLocation.Equals(TargetLocation)) return false;
+
+	// Passed all conditions
+
+	bOrientRotationToMovement = false;
+	
+	// Perform Transition to Climb Point
+	float UpSpeed = Velocity | FVector::UpVector;
+	float TransDistance = FVector::Dist(TargetLocation, UpdatedComponent->GetComponentLocation());
+
+	TransitionQueuedMontageSpeed = FMath::GetMappedRangeValueClamped(FVector2D(-500, 750), FVector2D(.9f, 1.2f), UpSpeed);
+	TransitionRMS.Reset();
+	TransitionRMS = MakeShared<FRootMotionSource_MoveToForce>();
+	TransitionRMS->AccumulateMode = ERootMotionAccumulateMode::Override;
+	
+	TransitionRMS->Duration = FMath::Clamp(TransDistance / 500.f, .1f, .25f);
+	SLOG(FString::Printf(TEXT("Duration: %f"), TransitionRMS->Duration))
+	TransitionRMS->StartLocation = UpdatedComponent->GetComponentLocation();
+	TransitionRMS->TargetLocation = TargetLocation;
+
+	// Apply Transition Root Motion Source
+	Velocity = FVector::ZeroVector;
+	SetMovementMode(MOVE_Flying);
+	TransitionRMS_ID = ApplyRootMotionSource(TransitionRMS);
+
+	// Animations
+	TransitionQueuedMontage = nullptr;
+	TransitionName = "Hang";
+	CharacterOwner->PlayAnimMontage(TransitionHangMontage, 1 / TransitionRMS->Duration);
+
+	return true;
+}
 
 
 #pragma region Helpers
