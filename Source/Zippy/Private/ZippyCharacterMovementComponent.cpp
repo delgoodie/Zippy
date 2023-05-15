@@ -137,6 +137,23 @@ FSavedMovePtr UZippyCharacterMovementComponent::FNetworkPredictionData_Client_Zi
 UZippyCharacterMovementComponent::UZippyCharacterMovementComponent()
 {
 	NavAgentProps.bCanCrouch = true;
+	ZippyServerMoveBitWriter.SetAllowResize(true);
+}
+
+void UZippyCharacterMovementComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	TickCount++;
+	if (IsNetMode(NM_Client))
+	{
+		GEngine->AddOnScreenDebugMessage(2, 100.f, FColor::Yellow, FString::Printf(TEXT("Correction: %.2f"), 100.f * (float)CorrectionCount / (float)TickCount));
+		GEngine->AddOnScreenDebugMessage(9, 100.f, FColor::Yellow, FString::Printf(TEXT("Bitrate: %.3f"), (float)TotalBitsSent / GetWorld()->GetTimeSeconds() / 1000.f));
+	}
+	else
+	{
+		GEngine->AddOnScreenDebugMessage(3, 100.f, FColor::Yellow, FString::Printf(TEXT("Location Error: %.4f cm/s"), 100.f * AccumulatedClientLocationError / GetWorld()->GetTimeSeconds()));
+	}
 }
 
 #pragma region CMC
@@ -156,6 +173,19 @@ void UZippyCharacterMovementComponent::UpdateFromCompressedFlags(uint8 Flags)
 	Safe_bWantsToSprint = (Flags & FSavedMove_Zippy::FLAG_Sprint) != 0;
 	Safe_bWantsToDash = (Flags & FSavedMove_Zippy::FLAG_Dash) != 0;
 }
+
+void UZippyCharacterMovementComponent::OnClientCorrectionReceived(FNetworkPredictionData_Client_Character& ClientData,
+	float TimeStamp, FVector NewLocation, FVector NewVelocity, UPrimitiveComponent* NewBase, FName NewBaseBoneName,
+	bool bHasBase, bool bBaseRelativePosition, uint8 ServerMovementMode)
+{
+	Super::OnClientCorrectionReceived(ClientData, TimeStamp, NewLocation, NewVelocity, NewBase, NewBaseBoneName,
+	                                  bHasBase, bBaseRelativePosition,
+	                                  ServerMovementMode);
+
+	CorrectionCount++;
+}
+
+
 FNetworkPredictionData_Client* UZippyCharacterMovementComponent::GetPredictionData_Client() const
 {
 	check(PawnOwner != nullptr)
@@ -458,6 +488,73 @@ void UZippyCharacterMovementComponent::OnMovementModeChanged(EMovementMode Previ
 		FHitResult WallHit;
 		Safe_bWallRunIsRight = GetWorld()->LineTraceSingleByProfile(WallHit, Start, End, "BlockAll", Params);
 	}
+}
+
+bool UZippyCharacterMovementComponent::ServerCheckClientError(float ClientTimeStamp, float DeltaTime,
+	const FVector& Accel, const FVector& ClientWorldLocation, const FVector& RelativeClientLocation,
+	UPrimitiveComponent* ClientMovementBase, FName ClientBaseBoneName, uint8 ClientMovementMode)
+{
+	if (GetCurrentNetworkMoveData()->NetworkMoveType == FCharacterNetworkMoveData::ENetworkMoveType::NewMove)
+	{
+		float LocationError = FVector::Dist(UpdatedComponent->GetComponentLocation(), ClientWorldLocation);
+		GEngine->AddOnScreenDebugMessage(6, 100.f, FColor::Yellow, FString::Printf(TEXT("Loc: %s"), *ClientWorldLocation.ToString()));
+		AccumulatedClientLocationError += LocationError * DeltaTime;
+	}
+
+
+	
+	return Super::ServerCheckClientError(ClientTimeStamp, DeltaTime, Accel, ClientWorldLocation, RelativeClientLocation,
+	                                     ClientMovementBase,
+	                                     ClientBaseBoneName, ClientMovementMode);
+
+}
+
+
+void UZippyCharacterMovementComponent::CallServerMovePacked(const FSavedMove_Character* NewMove, const FSavedMove_Character* PendingMove, const FSavedMove_Character* OldMove)
+{
+	// Get storage container we'll be using and fill it with movement data
+	FCharacterNetworkMoveDataContainer& MoveDataContainer = GetNetworkMoveDataContainer();
+	MoveDataContainer.ClientFillNetworkMoveData(NewMove, PendingMove, OldMove);
+
+	// Reset bit writer without affecting allocations
+	FBitWriterMark BitWriterReset;
+	BitWriterReset.Pop(ZippyServerMoveBitWriter);
+
+	// 'static' to avoid reallocation each invocation
+	static FCharacterServerMovePackedBits PackedBits;
+	UNetConnection* NetConnection = CharacterOwner->GetNetConnection();	
+
+
+	{
+		// Extract the net package map used for serializing object references.
+		ZippyServerMoveBitWriter.PackageMap = NetConnection ? ToRawPtr(NetConnection->PackageMap) : nullptr;
+	}
+
+	if (ZippyServerMoveBitWriter.PackageMap == nullptr)
+	{
+		UE_LOG(LogNetPlayerMovement, Error, TEXT("CallServerMovePacked: Failed to find a NetConnection/PackageMap for data serialization!"));
+		return;
+	}
+
+	// Serialize move struct into a bit stream
+	if (!MoveDataContainer.Serialize(*this, ZippyServerMoveBitWriter, ZippyServerMoveBitWriter.PackageMap) || ZippyServerMoveBitWriter.IsError())
+	{
+		UE_LOG(LogNetPlayerMovement, Error, TEXT("CallServerMovePacked: Failed to serialize out movement data!"));
+		return;
+	}
+
+	// Copy bits to our struct that we can NetSerialize to the server.
+	PackedBits.DataBits.SetNumUninitialized(ZippyServerMoveBitWriter.GetNumBits());
+	
+	check(PackedBits.DataBits.Num() >= ZippyServerMoveBitWriter.GetNumBits());
+	FMemory::Memcpy(PackedBits.DataBits.GetData(), ZippyServerMoveBitWriter.GetData(), ZippyServerMoveBitWriter.GetNumBytes());
+
+	TotalBitsSent += PackedBits.DataBits.Num();
+
+	// Send bits to server!
+	ServerMovePacked_ClientSend(PackedBits);
+
+	MarkForClientCameraUpdate();
 }
 
 #pragma endregion

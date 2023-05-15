@@ -150,6 +150,14 @@ class ZIPPY_API UZippyCharacterMovementComponent : public UCharacterMovementComp
 
 		bool Safe_bWallRunIsRight;
 
+	float AccumulatedClientLocationError=0.f;
+
+
+	int TickCount=0;
+	int CorrectionCount=0;
+	int TotalBitsSent=0;
+	
+
 	// Replication
 		UPROPERTY(ReplicatedUsing=OnRep_Dash) bool Proxy_bDash;
 
@@ -162,6 +170,8 @@ public:
 
 public:
 	UZippyCharacterMovementComponent();
+
+	void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	// Actor Component
 protected:
@@ -179,6 +189,7 @@ public:
 	
 protected:
 	virtual void UpdateFromCompressedFlags(uint8 Flags) override;
+	virtual void OnClientCorrectionReceived(FNetworkPredictionData_Client_Character& ClientData, float TimeStamp, FVector NewLocation, FVector NewVelocity, UPrimitiveComponent* NewBase, FName NewBaseBoneName, bool bHasBase, bool bBaseRelativePosition, uint8 ServerMovementMode) override;
 public:
 	virtual void UpdateCharacterStateBeforeMovement(float DeltaSeconds) override;
 	virtual void UpdateCharacterStateAfterMovement(float DeltaSeconds) override;
@@ -187,6 +198,12 @@ protected:
 	virtual void PhysCustom(float deltaTime, int32 Iterations) override;
 	virtual void OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode) override;
 
+	virtual bool ServerCheckClientError(float ClientTimeStamp, float DeltaTime, const FVector& Accel, const FVector& ClientWorldLocation, const FVector& RelativeClientLocation, UPrimitiveComponent* ClientMovementBase, FName ClientBaseBoneName, uint8 ClientMovementMode) override;
+
+	FNetBitWriter ZippyServerMoveBitWriter;
+	
+	virtual void CallServerMovePacked(const FSavedMove_Character* NewMove, const FSavedMove_Character* PendingMove, const FSavedMove_Character* OldMove) override;
+	
 	// Slide
 private:
 	void EnterSlide(EMovementMode PrevMode, ECustomMovementMode PrevCustomMode);
