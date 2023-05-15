@@ -501,12 +501,10 @@ bool UZippyCharacterMovementComponent::ServerCheckClientError(float ClientTimeSt
 		AccumulatedClientLocationError += LocationError * DeltaTime;
 	}
 
-
 	
-	return Super::ServerCheckClientError(ClientTimeStamp, DeltaTime, Accel, ClientWorldLocation, RelativeClientLocation,
-	                                     ClientMovementBase,
-	                                     ClientBaseBoneName, ClientMovementMode);
-
+	TotalServerReceiveCount++;
+	
+	return Super::ServerCheckClientError(ClientTimeStamp, DeltaTime, Accel, ClientWorldLocation, RelativeClientLocation, ClientMovementBase, ClientBaseBoneName, ClientMovementMode);
 }
 
 
@@ -524,7 +522,6 @@ void UZippyCharacterMovementComponent::CallServerMovePacked(const FSavedMove_Cha
 	static FCharacterServerMovePackedBits PackedBits;
 	UNetConnection* NetConnection = CharacterOwner->GetNetConnection();	
 
-
 	{
 		// Extract the net package map used for serializing object references.
 		ZippyServerMoveBitWriter.PackageMap = NetConnection ? ToRawPtr(NetConnection->PackageMap) : nullptr;
@@ -535,6 +532,20 @@ void UZippyCharacterMovementComponent::CallServerMovePacked(const FSavedMove_Cha
 		UE_LOG(LogNetPlayerMovement, Error, TEXT("CallServerMovePacked: Failed to find a NetConnection/PackageMap for data serialization!"));
 		return;
 	}
+
+	TotalClientSendCount++;
+	auto WorldContexts = GEngine->GetWorldContexts();
+	for (auto WC : WorldContexts)
+	{
+		auto PC =WC.World()->GetFirstPlayerController();
+		if (PC && PC->GetPawn() && PC->HasAuthority())
+		{
+			int ServerRxCount = Cast<AZippyCharacter>(PC->GetPawn())->GetZippyCharacterMovement()->TotalServerReceiveCount;
+			GEngine->AddOnScreenDebugMessage(7, 100.f, FColor::Yellow, FString::Printf(TEXT("Drop rate: %.2f"), 100.f * (TotalClientSendCount - ServerRxCount) / TotalClientSendCount));
+		}
+		
+	}
+
 
 	// Serialize move struct into a bit stream
 	if (!MoveDataContainer.Serialize(*this, ZippyServerMoveBitWriter, ZippyServerMoveBitWriter.PackageMap) || ZippyServerMoveBitWriter.IsError())

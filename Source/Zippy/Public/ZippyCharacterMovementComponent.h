@@ -201,6 +201,8 @@ protected:
 	virtual bool ServerCheckClientError(float ClientTimeStamp, float DeltaTime, const FVector& Accel, const FVector& ClientWorldLocation, const FVector& RelativeClientLocation, UPrimitiveComponent* ClientMovementBase, FName ClientBaseBoneName, uint8 ClientMovementMode) override;
 
 	FNetBitWriter ZippyServerMoveBitWriter;
+	int TotalClientSendCount=0;
+	int TotalServerReceiveCount=0;
 	
 	virtual void CallServerMovePacked(const FSavedMove_Character* NewMove, const FSavedMove_Character* PendingMove, const FSavedMove_Character* OldMove) override;
 	
