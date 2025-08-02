@@ -176,11 +176,11 @@ void UZippyCharacterMovementComponent::UpdateFromCompressedFlags(uint8 Flags)
 
 void UZippyCharacterMovementComponent::OnClientCorrectionReceived(FNetworkPredictionData_Client_Character& ClientData,
 	float TimeStamp, FVector NewLocation, FVector NewVelocity, UPrimitiveComponent* NewBase, FName NewBaseBoneName,
-	bool bHasBase, bool bBaseRelativePosition, uint8 ServerMovementMode)
+	bool bHasBase, bool bBaseRelativePosition, uint8 ServerMovementMode, FVector ServerGravityDirection)
 {
 	Super::OnClientCorrectionReceived(ClientData, TimeStamp, NewLocation, NewVelocity, NewBase, NewBaseBoneName,
 	                                  bHasBase, bBaseRelativePosition,
-	                                  ServerMovementMode);
+	                                  ServerMovementMode, ServerGravityDirection);
 
 	CorrectionCount++;
 }
@@ -259,11 +259,11 @@ bool UZippyCharacterMovementComponent::CanAttemptJump() const
 	return Super::CanAttemptJump() || IsWallRunning() || IsHanging() || IsClimbing();
 }
 
-bool UZippyCharacterMovementComponent::DoJump(bool bReplayingMoves)
+bool UZippyCharacterMovementComponent::DoJump(bool bReplayingMoves, float DeltaTime)
 {
 	bool bWasWallRunning = IsWallRunning();
 	bool bWasOnWall = IsHanging() || IsClimbing();
-	if (Super::DoJump(bReplayingMoves))
+	if (Super::DoJump(bReplayingMoves, DeltaTime))
 	{
 		if (bWasWallRunning)
 		{
@@ -660,7 +660,8 @@ void UZippyCharacterMovementComponent::PhysSlide(float deltaTime, int32 Iteratio
 				StartNewPhysics(remainingTime,Iterations);
 				return;
 			}
-			else if ( IsSwimming() ) //just entered water
+			else if ( IsSwimming() //just entered water
+				)
 			{
 				StartSwimming(OldLocation, OldVelocity, timeTick, remainingTime, Iterations);
 				return;
@@ -684,8 +685,7 @@ void UZippyCharacterMovementComponent::PhysSlide(float deltaTime, int32 Iteratio
 		if ( bCheckLedges && !CurrentFloor.IsWalkableFloor() )
 		{
 			// calculate possible alternate movement
-			const FVector GravDir = FVector(0.f,0.f,-1.f);
-			const FVector NewDelta = bTriedLedgeMove ? FVector::ZeroVector : GetLedgeMove(OldLocation, Delta, GravDir);
+			const FVector NewDelta = bTriedLedgeMove ? FVector::ZeroVector : GetLedgeMove(OldLocation, Delta, OldFloor);
 			if ( !NewDelta.IsZero() )
 			{
 				// first revert this move
@@ -695,7 +695,7 @@ void UZippyCharacterMovementComponent::PhysSlide(float deltaTime, int32 Iteratio
 				bTriedLedgeMove = true;
 
 				// Try new movement direction
-				Velocity = NewDelta / timeTick;
+				Velocity = NewDelta/timeTick; // v = dx/dt
 				remainingTime += timeTick;
 				continue;
 			}
@@ -749,7 +749,7 @@ void UZippyCharacterMovementComponent::PhysSlide(float deltaTime, int32 Iteratio
 			// check if just entered water
 			if ( IsSwimming() )
 			{
-				StartSwimming(OldLocation, Velocity, timeTick, remainingTime, Iterations);
+				StartSwimming(OldLocation, OldVelocity, timeTick, remainingTime, Iterations);
 				return;
 			}
 
@@ -887,7 +887,8 @@ void UZippyCharacterMovementComponent::PhysProne(float deltaTime, int32 Iteratio
 				StartNewPhysics(remainingTime,Iterations);
 				return;
 			}
-			else if ( IsSwimming() ) //just entered water
+			else if ( IsSwimming() //just entered water
+				)
 			{
 				StartSwimming(OldLocation, OldVelocity, timeTick, remainingTime, Iterations);
 				return;
@@ -911,8 +912,7 @@ void UZippyCharacterMovementComponent::PhysProne(float deltaTime, int32 Iteratio
 		if ( bCheckLedges && !CurrentFloor.IsWalkableFloor() )
 		{
 			// calculate possible alternate movement
-			const FVector GravDir = FVector(0.f,0.f,-1.f);
-			const FVector NewDelta = bTriedLedgeMove ? FVector::ZeroVector : GetLedgeMove(OldLocation, Delta, GravDir);
+			const FVector NewDelta = bTriedLedgeMove ? FVector::ZeroVector : GetLedgeMove(OldLocation, Delta, OldFloor);
 			if ( !NewDelta.IsZero() )
 			{
 				// first revert this move
@@ -965,7 +965,7 @@ void UZippyCharacterMovementComponent::PhysProne(float deltaTime, int32 Iteratio
 			// check if just entered water
 			if ( IsSwimming() )
 			{
-				StartSwimming(OldLocation, Velocity, timeTick, remainingTime, Iterations);
+				StartSwimming(OldLocation, OldVelocity, timeTick, remainingTime, Iterations);
 				return;
 			}
 
@@ -988,7 +988,7 @@ void UZippyCharacterMovementComponent::PhysProne(float deltaTime, int32 Iteratio
 			if( !bJustTeleported && !HasAnimRootMotion() && !CurrentRootMotion.HasOverrideVelocity() && timeTick >= MIN_TICK_TIME)
 			{
 				// TODO-RootMotionSource: Allow this to happen during partial override Velocity, but only set allowed axes?
-				Velocity = (UpdatedComponent->GetComponentLocation() - OldLocation) / timeTick; // v = dx / dt
+				Velocity = (UpdatedComponent->GetComponentLocation() - OldLocation) / timeTick;
 				MaintainHorizontalGroundVelocity();
 			}
 		}

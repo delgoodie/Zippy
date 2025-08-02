@@ -8,7 +8,7 @@ public class ZippyTarget : TargetRules
 	public ZippyTarget(TargetInfo Target) : base(Target)
 	{
 		Type = TargetType.Game;
-		DefaultBuildSettings = BuildSettingsVersion.V2;
+		DefaultBuildSettings = BuildSettingsVersion.V5;
 		ExtraModuleNames.Add("Zippy");
 	}
 }
